@@ -34,6 +34,7 @@ import {
 } from "@/lib/game/audio";
 import type { ChampionDef, Difficulty, MatchState, Screen } from "@/lib/game/types";
 import { defaultSave, loadSave, recordRanked, writeSave, type CustomDeck, type SaveData } from "@/lib/store/save";
+import { asset } from "@/lib/asset";
 import { cn } from "@/lib/utils";
 
 const MODES: { id: Screen; label: string; hint: string; icon: typeof Swords }[] = [
@@ -365,7 +366,7 @@ function Title({
   return (
     <div className="relative min-h-dvh">
       <img
-        src="./art/title-bg.jpg"
+        src={asset("art/title-bg.jpg")}
         alt=""
         className="absolute inset-0 h-full w-full object-cover opacity-70"
         crossOrigin="anonymous"
@@ -507,7 +508,7 @@ function Campaign({
 }) {
   return (
     <div className="space-y-4">
-      <img src="./art/star-chart.jpg" alt="" className="w-full rounded-[20px] hairline object-cover h-36" crossOrigin="anonymous" />
+      <img src={asset("art/star-chart.jpg")} alt="" className="w-full rounded-[20px] hairline object-cover h-36" crossOrigin="anonymous" />
       <p className="text-sm text-muted">
         Walk the council galaxies. Winning a chapter unlocks that Champion for Skirmish and the Deckwright.
       </p>

@@ -1,3 +1,4 @@
+import { asset } from "@/lib/asset";
 import { CHAMP_BY_ID } from "@/lib/game/catalog";
 import { cn } from "@/lib/utils";
 
@@ -23,24 +24,24 @@ const TINT: Record<string, string> = {
 };
 
 const PLATE: Record<string, string> = {
-  lyra: "./art/champs/lyra.jpg",
-  d9ra: "./art/champs/d9ra.jpg",
-  srath: "./art/champs/srath.jpg",
-  arkos: "./art/champs/arkos.jpg",
-  kairos: "./art/champs/kairos.jpg",
-  aetheris: "./art/champs/aetheris.jpg",
-  scendr: "./art/champs/scendr.jpg",
-  sancora: "./art/champs/sancora.jpg",
-  sephrael: "./art/champs/sephrael.jpg",
-  omnisiren: "./art/champs/omnisiren.jpg",
-  lightfather: "./art/champs/lightfather.jpg",
-  volaris: "./art/champs/volaris.jpg",
-  zeta: "./art/champs/zeta.jpg",
-  justicae: "./art/champs/justicae.jpg",
-  seidon: "./art/champs/seidon.jpg",
-  nullvoid: "./art/champs/nullvoid.jpg",
-  veil: "./art/champs/veil.jpg",
-  cosmara: "./art/champs/cosmara.jpg",
+  lyra: "art/champs/lyra.jpg",
+  d9ra: "art/champs/d9ra.jpg",
+  srath: "art/champs/srath.jpg",
+  arkos: "art/champs/arkos.jpg",
+  kairos: "art/champs/kairos.jpg",
+  aetheris: "art/champs/aetheris.jpg",
+  scendr: "art/champs/scendr.jpg",
+  sancora: "art/champs/sancora.jpg",
+  sephrael: "art/champs/sephrael.jpg",
+  omnisiren: "art/champs/omnisiren.jpg",
+  lightfather: "art/champs/lightfather.jpg",
+  volaris: "art/champs/volaris.jpg",
+  zeta: "art/champs/zeta.jpg",
+  justicae: "art/champs/justicae.jpg",
+  seidon: "art/champs/seidon.jpg",
+  nullvoid: "art/champs/nullvoid.jpg",
+  veil: "art/champs/veil.jpg",
+  cosmara: "art/champs/cosmara.jpg",
 };
 
 export function champTint(id: string): string {
@@ -52,9 +53,9 @@ export function champTint(id: string): string {
 }
 
 export function champPlate(id: string): string | undefined {
-  if (PLATE[id]) return PLATE[id];
-  const root = id.split("-")[0] ?? id;
-  return PLATE[root];
+  const key = PLATE[id] ? id : (id.split("-")[0] ?? id);
+  const rel = PLATE[key];
+  return rel ? asset(rel) : undefined;
 }
 
 export function hashId(s: string): number {
