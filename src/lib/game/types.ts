@@ -4,7 +4,8 @@ export type Keyword =
   | "lightDrain"
   | "accordBreak"
   | "haste"
-  | "ward";
+  | "ward"
+  | "inspire";
 
 export type CardType = "minion" | "spell" | "resonance";
 export type Rarity = "common" | "uncommon" | "rare" | "signature";
@@ -41,7 +42,8 @@ export type EffectOp =
   | "lifeOpp"
   | "stealLife"
   | "copyMinion"
-  | "readyAll";
+  | "readyAll"
+  | "tempBuff";
 
 export interface Effect {
   op: EffectOp;

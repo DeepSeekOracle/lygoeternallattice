@@ -1,5 +1,7 @@
 import type { Effect, TargetKind } from "./types";
 
+export const FACE_TARGET = "face";
+
 export function parseFx(src: string): Effect[] {
   if (!src) return [];
   return src.split(",").filter(Boolean).map(parseOne);
@@ -62,6 +64,8 @@ function parseOne(part: string): Effect {
       return { op: "copyMinion", target: "allyMinion" };
     case "readyAll":
       return { op: "readyAll" };
+    case "tempBuff":
+      return { op: "tempBuff", n: n ?? 1, n2: n2 ?? 0, target: "allyMinion" };
     default:
       return { op: "draw", n: 0 };
   }
@@ -74,6 +78,33 @@ export function needsTarget(effects: Effect[]): TargetKind {
   return "none";
 }
 
+const HARD_TARGET: ReadonlySet<Effect["op"]> = new Set([
+  "buff",
+  "destroy",
+  "bounce",
+  "copyMinion",
+  "untap",
+  "returnGy",
+  "tempBuff",
+  "silence",
+]);
+
+export function requiresTarget(effects: Effect[]): boolean {
+  return effects.some((e) => !!e.target && e.target !== "none" && HARD_TARGET.has(e.op));
+}
+
+export function allowsFace(effects: Effect[]): boolean {
+  return effects.some((e) => e.op === "dmg" || e.op === "dmgF");
+}
+
+export function targetPrompt(kind: TargetKind, face = false): string {
+  if (kind === "enemyMinion") return face ? "Choose an enemy minion — or the Champion" : "Choose an enemy minion";
+  if (kind === "allyMinion") return "Choose a friendly minion";
+  if (kind === "anyMinion") return face ? "Choose a minion — or a Champion" : "Choose a minion";
+  if (kind === "allyGrave") return "Choose from the Lattice Archive";
+  return "Choose a target";
+}
+
 export const KW: Record<string, import("./types").Keyword> = {
   L: "latticeWalk",
   S: "sealGuard",
@@ -81,6 +112,7 @@ export const KW: Record<string, import("./types").Keyword> = {
   A: "accordBreak",
   H: "haste",
   W: "ward",
+  I: "inspire",
 };
 
 export function parseKw(src: string): import("./types").Keyword[] {

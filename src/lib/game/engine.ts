@@ -1,5 +1,5 @@
 import { CARD_BY_ID, CHAMP_BY_ID } from "./catalog";
-import { needsTarget } from "./fx";
+import { FACE_TARGET, allowsFace, needsTarget, requiresTarget } from "./fx";
 import { nextRng, rngInt, shuffle } from "./rng";
 import type {
   Action,
@@ -22,6 +22,20 @@ export function opp(p: 0 | 1): 0 | 1 {
 
 export function champOf(s: MatchState, p: 0 | 1): ChampionDef {
   return CHAMP_BY_ID[s.players[p].championId]!;
+}
+
+export function maxLifeOf(s: MatchState, p: 0 | 1): number {
+  const c = champOf(s, p);
+  return START_LIFE + (c.passive.type === "bonusLife" ? c.passive.value : 0);
+}
+
+export function healPlayer(s: MatchState, p: 0 | 1, n: number) {
+  if (n <= 0 || s.winner !== null) return;
+  const max = maxLifeOf(s, p);
+  const before = s.players[p].life;
+  s.players[p].life = Math.min(max, before + n);
+  const gained = s.players[p].life - before;
+  if (gained > 0) log(s, `Lattice Integrity +${gained} (${s.players[p].life}/${max})`, p);
 }
 
 export function cardOf(iid: string, s: MatchState) {
@@ -158,18 +172,20 @@ function drawOne(s: MatchState, p: 0 | 1, reason = "draw"): boolean {
 
 export function damagePlayer(s: MatchState, p: 0 | 1, n: number, src: CardInstance | null) {
   if (n <= 0 || s.winner !== null) return;
-  s.players[p].life -= n;
-  log(s, `Lattice Integrity −${n} (${s.players[p].life})`, p);
+  const before = s.players[p].life;
+  s.players[p].life = Math.max(0, before - n);
+  const dealt = before - s.players[p].life;
+  log(s, `HP −${dealt} (${s.players[p].life}/${maxLifeOf(s, p)})`, p);
   if (src && src.keywords.includes("lightDrain") && !src.silenced) {
-    s.players[src.controller].life += n;
+    healPlayer(s, src.controller, dealt);
   }
   const atkChamp = src ? champOf(s, src.controller) : null;
   if (atkChamp?.passive.type === "damageMills") mill(s, p, 1);
   if (s.players[p].life <= 0) {
     s.winner = opp(p);
     s.phase = "over";
-    s.winReason = "The lattice collapsed.";
-    log(s, `${s.players[opp(p)].name} holds the lattice.`);
+    s.winReason = `${s.players[p].name} reached 0 HP.`;
+    log(s, `${s.players[opp(p)].name} wins — ${s.players[p].name} fell to 0 HP.`);
   }
 }
 
@@ -212,7 +228,7 @@ function dealMinion(s: MatchState, inst: CardInstance, n: number, src: CardInsta
   }
   inst.toughness -= n;
   if (src?.keywords.includes("lightDrain") && !src.silenced) {
-    s.players[src.controller].life += n;
+    healPlayer(s, src.controller, n);
   }
   const atkChamp = src ? champOf(s, src.controller) : null;
   if (atkChamp?.passive.type === "damageMills") mill(s, inst.controller, 1);
@@ -290,7 +306,9 @@ function resolveOne(
       break;
     case "dmg": {
       const n = (e.n ?? 1) + bonus;
-      if (tgt) dealMinion(s, tgt, n, src, true);
+      if (targetId === FACE_TARGET) {
+        damagePlayer(s, opp(p), n, src);
+      } else if (tgt) dealMinion(s, tgt, n, src, true);
       else {
         const r = pickRandomEnemyMinion(s, p);
         if (r) dealMinion(s, r, n, src, false);
@@ -308,7 +326,7 @@ function resolveOne(
       }
       break;
     case "heal":
-      me.life += e.n ?? 1;
+      healPlayer(s, p, e.n ?? 1);
       break;
     case "buff":
       if (tgt) {
@@ -374,16 +392,18 @@ function resolveOne(
         }
       }
       break;
-    case "silence":
-      if (tgt) {
-        if (tgt.ward > 0) {
-          tgt.ward -= 1;
+    case "silence": {
+      const m = tgt ?? pickRandomEnemyMinion(s, p);
+      if (m) {
+        if (m.ward > 0) {
+          m.ward -= 1;
           break;
         }
-        tgt.silenced = true;
-        tgt.keywords = [];
+        m.silenced = true;
+        m.keywords = [];
       }
       break;
+    }
     case "token":
       summonToken(s, p, e.n ?? 1, e.n2 ?? 1, e.name ?? "Echo");
       break;
@@ -412,7 +432,7 @@ function resolveOne(
       break;
     case "stealLife":
       damagePlayer(s, opp(p), e.n ?? 1, src);
-      me.life += e.n ?? 1;
+      healPlayer(s, p, e.n ?? 1);
       break;
     case "copyMinion":
       if (tgt && me.board.length < BOARD_CAP) {
@@ -426,6 +446,12 @@ function resolveOne(
           m.tapped = false;
           m.sick = false;
         }
+      }
+      break;
+    case "tempBuff":
+      if (tgt) {
+        tgt.eotPower += e.n ?? 1;
+        tgt.eotTough += e.n2 ?? 0;
       }
       break;
   }
@@ -444,26 +470,34 @@ function resolveEffects(
   }
 }
 
-export function legalTargets(s: MatchState, p: 0 | 1, kind: TargetKind): string[] {
+export function legalTargets(s: MatchState, p: 0 | 1, kind: TargetKind, fx?: Effect[]): string[] {
   const me = s.players[p];
   const you = s.players[opp(p)];
   if (kind === "none") return [];
-  if (kind === "enemyMinion") return you.board.slice();
-  if (kind === "allyMinion") return me.board.slice();
-  if (kind === "anyMinion") return me.board.concat(you.board);
-  if (kind === "allyGrave") {
-    return me.gy.filter((id) => {
+  let ids: string[] = [];
+  if (kind === "enemyMinion") ids = you.board.slice();
+  else if (kind === "allyMinion") ids = me.board.slice();
+  else if (kind === "anyMinion") ids = me.board.concat(you.board);
+  else if (kind === "allyGrave") {
+    ids = me.gy.filter((id) => {
       const d = CARD_BY_ID[s.cards[id]?.cardId ?? ""];
       return d?.type === "minion";
     });
   }
-  return [];
+  if (fx && allowsFace(fx) && (kind === "enemyMinion" || kind === "anyMinion")) {
+    ids.push(FACE_TARGET);
+  }
+  return ids;
 }
 
 function canAttack(s: MatchState, inst: CardInstance): boolean {
   if (inst.tapped || inst.controller !== s.active) return false;
   if (inst.sick && !hasHaste(s, inst.controller, inst)) return false;
   return true;
+}
+
+export function canDeclareAttack(s: MatchState, inst: CardInstance): boolean {
+  return canAttack(s, inst);
 }
 
 function effectsForPlay(s: MatchState, p: 0 | 1, iid: string, choice?: number): Effect[] {
@@ -531,25 +565,27 @@ export function getLegalActions(s: MatchState): Action[] {
 
   const hero = champOf(s, p);
   if (!pl.heroUsed && manaAvail(pl) >= hero.abilityCost) {
-    const fx = hero.abilityChoices?.[0]?.effects ?? hero.ability;
-    const kind = needsTarget(hero.abilityChoices ? hero.abilityChoices.flatMap((c) => c.effects) : hero.ability);
     if (hero.abilityChoices) {
       hero.abilityChoices.forEach((c, i) => {
         const k = needsTarget(c.effects);
         if (k === "none") acts.push({ type: "hero", choice: i });
         else {
-          const ts = legalTargets(s, p, k);
-          if (!ts.length && (k === "enemyMinion" || k === "allyMinion" || k === "anyMinion" || k === "allyGrave")) return;
-          if (!ts.length) acts.push({ type: "hero", choice: i });
-          else for (const t of ts) acts.push({ type: "hero", choice: i, target: t });
+          const ts = legalTargets(s, p, k, c.effects);
+          for (const t of ts) acts.push({ type: "hero", choice: i, target: t });
+          if (!requiresTarget(c.effects) && !ts.includes(FACE_TARGET)) {
+            acts.push({ type: "hero", choice: i });
+          }
         }
       });
-    } else if (kind === "none") acts.push({ type: "hero" });
-    else {
-      const ts = legalTargets(s, p, kind);
-      if (ts.length) for (const t of ts) acts.push({ type: "hero", target: t });
+    } else {
+      const kind = needsTarget(hero.ability);
+      if (kind === "none") acts.push({ type: "hero" });
+      else {
+        const ts = legalTargets(s, p, kind, hero.ability);
+        for (const t of ts) acts.push({ type: "hero", target: t });
+        if (!requiresTarget(hero.ability) && !ts.length) acts.push({ type: "hero" });
+      }
     }
-    void fx;
   }
 
   for (const hid of pl.hand) {
@@ -560,18 +596,14 @@ export function getLegalActions(s: MatchState): Action[] {
     if (def.type === "minion" && pl.board.length >= BOARD_CAP) continue;
     const fx = effectsForPlay(s, p, hid);
     const kind = needsTarget(fx);
-    if (kind === "none") acts.push({ type: "play", iid: hid });
-    else {
-      const ts = legalTargets(s, p, kind);
-      if (!ts.length) {
-        // targeted spells with no target are illegal
-        if (def.type === "minion" && fx.every((e) => e.target && e.target !== "none")) {
-          // minion can still enter without on-play target? skip targeted enter
-          continue;
-        }
-        continue;
-      }
-      for (const t of ts) acts.push({ type: "play", iid: hid, target: t });
+    if (kind === "none") {
+      acts.push({ type: "play", iid: hid });
+      continue;
+    }
+    const ts = legalTargets(s, p, kind, fx);
+    for (const t of ts) acts.push({ type: "play", iid: hid, target: t });
+    if (def.type === "minion" || !requiresTarget(fx)) {
+      if (!ts.includes(FACE_TARGET)) acts.push({ type: "play", iid: hid });
     }
   }
   return acts;
@@ -619,7 +651,7 @@ function startTurn(s: MatchState, p: 0 | 1) {
     const r = nextRng(s.rng);
     s.rng = r.state;
     if (r.value < 0.5) drawOne(s, p, "zeta");
-    else pl.life += 1;
+    else healPlayer(s, p, 1);
   }
   if (c.passive.type === "emptyDraw" && pl.board.length === 0) drawOne(s, p, "horizon");
 
@@ -632,7 +664,13 @@ function endTurn(s: MatchState) {
   const p = s.active;
   const pl = s.players[p];
   const c = champOf(s, p);
-  if (c.passive.type === "endHeal") pl.life += c.passive.value;
+  if (c.passive.type === "endHeal") healPlayer(s, p, c.passive.value);
+  for (const id of pl.board) {
+    const m = s.cards[id];
+    if (!m) continue;
+    m.eotPower = 0;
+    m.eotTough = 0;
+  }
   pl.tempMana = 0;
   startTurn(s, opp(p));
 }
@@ -720,6 +758,14 @@ export function applyAction(state: MatchState, action: Action): MatchState {
         log(s, `${def.type === "resonance" ? "Resonance" : "Spell"}: ${def.name}.`, p);
       }
       resolveEffects(s, p, fx, inst, action.target);
+      if (def.type !== "minion") {
+        for (const id of [...pl.board]) {
+          const m = s.cards[id];
+          if (!m || m.silenced || !m.keywords.includes("inspire")) continue;
+          m.eotPower += 1;
+          log(s, `${CARD_BY_ID[m.cardId]?.name ?? "Minion"} is inspired.`, p);
+        }
+      }
       pl.firstCardPlayed = true;
       break;
     }
@@ -741,8 +787,11 @@ export function applyAction(state: MatchState, action: Action): MatchState {
     case "beginCombat":
       if (s.phase !== "main" || pl.combatUsed) break;
       s.phase = "attack";
-      s.attackers = [];
-      log(s, "Assault declared.", p);
+      s.attackers = pl.board.filter((id) => {
+        const m = s.cards[id];
+        return !!m && canAttack(s, m);
+      });
+      log(s, s.attackers.length ? `Assault — ${s.attackers.length} ready.` : "Assault declared.", p);
       break;
     case "skipCombat":
       if (s.phase !== "main") break;
@@ -763,6 +812,15 @@ export function applyAction(state: MatchState, action: Action): MatchState {
         pl.combatUsed = true;
         s.phase = "main";
         break;
+      }
+      for (const aId of s.attackers) {
+        const atk = s.cards[aId];
+        if (!atk || atk.silenced) continue;
+        const cdef = CARD_BY_ID[atk.cardId];
+        if (cdef?.onAttack.length) {
+          log(s, `${cdef.name} assaults.`, p);
+          resolveEffects(s, p, cdef.onAttack, atk);
+        }
       }
       s.phase = "block";
       s.blocks = {};
@@ -872,4 +930,63 @@ export function isHuman(s: MatchState): boolean {
 export function isHumanController(s: MatchState, p: 0 | 1): boolean {
   if (s.phase === "block") return s.humans[opp(s.active)];
   return s.humans[p];
+}
+
+export function combatPreview(
+  s: MatchState,
+  atkId: string,
+  blkId?: string | null,
+): { power: number; face: number; kills: boolean; dies: boolean; overflow: number } {
+  const atk = s.cards[atkId];
+  if (!atk) return { power: 0, face: 0, kills: false, dies: false, overflow: 0 };
+  const ap = currentPower(s, atk);
+  const blk = blkId ? s.cards[blkId] : undefined;
+  if (!blk) return { power: ap, face: ap, kills: false, dies: false, overflow: 0 };
+  const bp = currentPower(s, blk);
+  const overflow = Math.max(0, ap - currentTough(blk));
+  return {
+    power: ap,
+    face: atk.keywords.includes("accordBreak") ? overflow : 0,
+    kills: ap >= currentTough(blk),
+    dies: bp >= currentTough(atk),
+    overflow,
+  };
+}
+
+export function playBlockReason(s: MatchState, p: 0 | 1, hid: string): string | null {
+  if (s.winner !== null) return "The lattice is closed";
+  if (s.phase === "attack") return "Finish the assault first";
+  if (s.phase === "block") return "Assign seals first";
+  if (s.phase === "mulligan") return "Keep or redraw first";
+  if (s.phase !== "main") return "Not your dawn";
+  if (s.active !== p) return "Not your dawn";
+  const def = defOf(hid, s);
+  if (!def) return "Unknown card";
+  const pl = s.players[p];
+  if (!pl.hand.includes(hid)) return "Not in hand";
+  const cost = playCost(s, p, hid);
+  const have = manaAvail(pl);
+  if (have < cost) return `Needs ${cost} mana · you have ${have}`;
+  if (def.type === "minion" && pl.board.length >= BOARD_CAP) return "The field is full";
+  const fx = effectsForPlay(s, p, hid);
+  const kind = needsTarget(fx);
+  if (kind !== "none" && def.type !== "minion") {
+    const ts = legalTargets(s, p, kind, fx);
+    if (!ts.length) {
+      if (kind === "allyGrave") return "The Archive is empty";
+      if (kind === "allyMinion") return "Needs a friendly minion";
+      if (kind === "enemyMinion") return "Needs an enemy minion";
+      return "No legal target";
+    }
+  }
+  return null;
+}
+
+export function isLegalAction(s: MatchState, a: Action): boolean {
+  return getLegalActions(s).some((x) => actionEq(x, a));
+}
+
+function actionEq(a: Action, b: Action): boolean {
+  if (a.type !== b.type) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
 }

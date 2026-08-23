@@ -148,6 +148,7 @@ export function forgeChampion(seed: number, title?: string): {
           : type === "spell"
             ? "A forged seal-script."
             : "A forged minion of the lattice.",
+      flavor: "Struck from the Lattice Forge.",
     };
     if (type === "resonance") {
       card.onPlay = parseFx("tempMana:2");

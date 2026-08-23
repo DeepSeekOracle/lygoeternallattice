@@ -5,6 +5,16 @@ let music: GainNode | null = null;
 let drone: OscillatorNode | null = null;
 let unlocked = false;
 
+let sfxVol = 0.8;
+let musicVol = 0.45;
+let muted = false;
+let sfxOn = true;
+let musicOn = true;
+
+function clamp01(v: number) {
+  return Math.max(0, Math.min(1, v));
+}
+
 function ac(): AudioContext | null {
   if (typeof window === "undefined") return null;
   if (!ctx) {
@@ -17,11 +27,38 @@ function ac(): AudioContext | null {
     sfx.connect(master);
     music.connect(master);
     master.connect(ctx.destination);
-    master.gain.value = 1;
-    sfx.gain.value = 0.8;
-    music.gain.value = 0.45;
+    applyGains();
   }
   return ctx;
+}
+
+function applyGains() {
+  if (!ctx || !master || !sfx || !music) return;
+  const t = ctx.currentTime;
+  master.gain.setTargetAtTime(muted ? 0 : 1, t, 0.04);
+  sfx.gain.setTargetAtTime(sfxOn ? sfxVol * sfxVol : 0, t, 0.04);
+  music.gain.setTargetAtTime(musicOn ? musicVol * musicVol : 0, t, 0.04);
+}
+
+export type AudioSettings = {
+  sfx: number;
+  music: number;
+  muted: boolean;
+  sfxOn: boolean;
+  musicOn: boolean;
+};
+
+export function getAudioSettings(): AudioSettings {
+  return { sfx: sfxVol, music: musicVol, muted, sfxOn, musicOn };
+}
+
+export function applyAudioSettings(s: Partial<AudioSettings>) {
+  if (typeof s.sfx === "number") sfxVol = clamp01(s.sfx);
+  if (typeof s.music === "number") musicVol = clamp01(s.music);
+  if (typeof s.muted === "boolean") muted = s.muted;
+  if (typeof s.sfxOn === "boolean") sfxOn = s.sfxOn;
+  if (typeof s.musicOn === "boolean") musicOn = s.musicOn;
+  applyGains();
 }
 
 export function unlockAudio() {
@@ -29,19 +66,48 @@ export function unlockAudio() {
   if (!c) return;
   if (c.state === "suspended") void c.resume();
   unlocked = true;
+  applyGains();
   startDrone();
 }
 
 export function setSfxVolume(v: number) {
-  if (sfx) sfx.gain.setTargetAtTime(v * v, ac()!.currentTime, 0.03);
+  sfxVol = clamp01(v);
+  applyGains();
 }
+
 export function setMusicVolume(v: number) {
-  if (music) music.gain.setTargetAtTime(v * v, ac()!.currentTime, 0.03);
+  musicVol = clamp01(v);
+  applyGains();
+}
+
+export function setMuted(v: boolean) {
+  muted = v;
+  applyGains();
+}
+
+export function toggleMuted(): boolean {
+  muted = !muted;
+  applyGains();
+  return muted;
+}
+
+export function setSfxOn(v: boolean) {
+  sfxOn = v;
+  applyGains();
+}
+
+export function setMusicOn(v: boolean) {
+  musicOn = v;
+  applyGains();
+}
+
+export function isMuted() {
+  return muted;
 }
 
 function beep(freq: number, dur: number, type: OscillatorType, gain = 0.08, bus: GainNode | null = sfx) {
   const c = ac();
-  if (!c || !bus || !unlocked) return;
+  if (!c || !bus || !unlocked || muted || !sfxOn) return;
   const o = c.createOscillator();
   const g = c.createGain();
   o.type = type;
@@ -57,6 +123,7 @@ function beep(freq: number, dur: number, type: OscillatorType, gain = 0.08, bus:
 }
 
 export function sfxPlay(kind: string) {
+  if (muted || !sfxOn) return;
   switch (kind) {
     case "ui":
       beep(520, 0.06, "sine", 0.04);
@@ -116,6 +183,6 @@ function startDrone() {
 }
 
 export function resumeAudio() {
-  const c = ac();
+  const c = ctx;
   if (c && c.state === "suspended") void c.resume();
 }

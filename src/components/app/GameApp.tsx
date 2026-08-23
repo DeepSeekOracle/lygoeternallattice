@@ -50,7 +50,6 @@ const MODES: { id: Screen; label: string; hint: string; icon: typeof Swords }[] 
 
 export function GameApp() {
   const [save, setSave] = useState<SaveData>(defaultSave);
-  // Client SPA: hydrate immediately so the title screen paints (SSR still waits for effect).
   const [hydrated, setHydrated] = useState(() => typeof window !== "undefined");
   const [screen, setScreen] = useState<Screen>("title");
   const [match, setMatch] = useState<MatchState | null>(null);
@@ -821,14 +820,18 @@ function Codex() {
       <section>
         <h3 className="font-display text-2xl">The Luminal Accords</h3>
         <ul className="mt-3 space-y-2 text-sm text-muted">
+          <li>
+            <span className="text-fg">Win:</span> reduce the enemy Champion to{" "}
+            <span className="text-fg">0 HP</span>. Both start at 20 HP (VΩLARIS 22). Unblocked assaults and some spells hit HP.
+          </li>
           <li>No land cards. Both operators begin at 0 mana.</li>
           <li>At the start of each of your dawns you gain +1 permanent mana, stacking to 20 on dawn 20.</li>
           <li>Resonance cards grant temporary mana (this dawn, or pending dawns). They are rare.</li>
           <li>Decks are 30 cards: 1 Champion in the command seal, 29 in the library. Max two copies of a minion or spell.</li>
           <li>Theme lock: a Champion’s minions only serve that Champion, plus lattice-shared COSMARA.</li>
-          <li>Minions carry Power/Integrity. Lattice-Walk, Seal-Guard, Light-Drain, Accord-Break, Haste, Ward.</li>
+          <li>Minions carry Power / Toughness. Lattice-Walk, Seal-Guard, Light-Drain, Accord-Break, Haste, Ward.</li>
           <li>Assault: declare attackers, assign one seal (blocker) each, then damage. First dawn does not draw.</li>
-          <li>Integrity 20 (VΩLARIS 22). Empty library inflicts rising fatigue.</li>
+          <li>Empty library inflicts rising fatigue to HP (1, then 2, then 3…).</li>
         </ul>
       </section>
       <section>
