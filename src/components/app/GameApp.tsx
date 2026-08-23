@@ -4,21 +4,34 @@ import {
   Dices,
   Hammer,
   Map as MapIcon,
+  Music,
   Settings,
   Swords,
   Trophy,
   Users,
+  Volume2,
   Wifi,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MatchView } from "@/components/game/MatchView";
 import { CardFace } from "@/components/game/CardFace";
 import { Sigil, champTint } from "@/components/game/Sigil";
+import { MuteButton, SoundSwitch, VolumeRow } from "@/components/game/SoundControls";
 import { MISSIONS } from "@/lib/game/campaign";
 import { CARD_BY_ID, CARDS, CHAMP_BY_ID, CHAMPIONS, defaultList, deckIssues, KEYWORD_TEXT } from "@/lib/game/catalog";
 import { createMatch } from "@/lib/game/engine";
 import { forgeChampion } from "@/lib/game/procedural";
-import { resumeAudio, setMusicVolume, setSfxVolume, sfxPlay, unlockAudio } from "@/lib/game/audio";
+import {
+  applyAudioSettings,
+  resumeAudio,
+  setMusicOn,
+  setMusicVolume,
+  setMuted,
+  setSfxOn,
+  setSfxVolume,
+  sfxPlay,
+  unlockAudio,
+} from "@/lib/game/audio";
 import type { ChampionDef, Difficulty, MatchState, Screen } from "@/lib/game/types";
 import { defaultSave, loadSave, recordRanked, writeSave, type CustomDeck, type SaveData } from "@/lib/store/save";
 import { cn } from "@/lib/utils";
@@ -36,7 +49,8 @@ const MODES: { id: Screen; label: string; hint: string; icon: typeof Swords }[] 
 
 export function GameApp() {
   const [save, setSave] = useState<SaveData>(defaultSave);
-  const [hydrated, setHydrated] = useState(false);
+  // Client SPA: hydrate immediately so the title screen paints (SSR still waits for effect).
+  const [hydrated, setHydrated] = useState(() => typeof window !== "undefined");
   const [screen, setScreen] = useState<Screen>("title");
   const [match, setMatch] = useState<MatchState | null>(null);
   const [matchBanner, setMatchBanner] = useState("Skirmish");
@@ -56,13 +70,21 @@ export function GameApp() {
     const s = loadSave();
     setSave(s);
     setNameDraft(s.playerName);
+    applyAudioSettings(s.settings);
     setHydrated(true);
+    const unlock = () => unlockAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
     const onVis = () => {
       if (document.visibilityState === "hidden") writeSave(s);
       else resumeAudio();
     };
     document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
   }, []);
 
   useEffect(() => {
@@ -71,13 +93,28 @@ export function GameApp() {
 
   function enter() {
     unlockAudio();
-    sfxPlay("ui");
-    setMusicVolume(save.settings.music);
-    setSfxVolume(save.settings.sfx);
+    applyAudioSettings(save.settings);
+    if (!save.settings.muted) sfxPlay("ui");
     if (!save.playerName.trim() && nameDraft.trim()) {
       setSave((x) => ({ ...x, playerName: nameDraft.trim().slice(0, 24) }));
     }
     setScreen("title");
+  }
+
+  function patchSettings(p: Partial<SaveData["settings"]>) {
+    setSave((x) => {
+      const settings = { ...x.settings, ...p };
+      applyAudioSettings(settings);
+      return { ...x, settings };
+    });
+  }
+
+  function toggleSound() {
+    const next = !save.settings.muted;
+    unlockAudio();
+    setMuted(next);
+    patchSettings({ muted: next });
+    if (!next) sfxPlay("ui");
   }
 
   function patch(p: Partial<SaveData>) {
@@ -152,6 +189,8 @@ export function GameApp() {
         onExit={onMatchExit}
         banner={matchBanner}
         shakeOn={save.settings.shake}
+        muted={save.settings.muted}
+        onToggleMute={toggleSound}
       />
     );
   }
@@ -165,15 +204,24 @@ export function GameApp() {
           setNameDraft={setNameDraft}
           onEnter={enter}
           onNav={(id) => {
-            sfxPlay("ui");
+            unlockAudio();
+            applyAudioSettings(save.settings);
+            if (!save.settings.muted) sfxPlay("ui");
             if (id === "settings") setScreen("settings");
             else setScreen(id);
           }}
           onName={() => patch({ playerName: nameDraft.trim().slice(0, 24) })}
+          muted={save.settings.muted}
+          onToggleMute={toggleSound}
         />
       )}
       {screen !== "title" && screen !== "match" && (
-        <Subpage title={labelFor(screen)} onBack={() => setScreen("title")}>
+        <Subpage
+          title={labelFor(screen)}
+          onBack={() => setScreen("title")}
+          muted={save.settings.muted}
+          onToggleMute={toggleSound}
+        >
           {screen === "campaign" && (
             <Campaign save={save} onPlay={(m) => {
               const opp = m.opponent;
@@ -268,7 +316,13 @@ export function GameApp() {
           )}
           {screen === "codex" && <Codex />}
           {screen === "settings" && (
-            <SettingsPane save={save} setSave={setSave} nameDraft={nameDraft} setNameDraft={setNameDraft} />
+            <SettingsPane
+              save={save}
+              patchSettings={patchSettings}
+              nameDraft={nameDraft}
+              setNameDraft={setNameDraft}
+              setSave={setSave}
+            />
           )}
         </Subpage>
       )}
@@ -296,6 +350,8 @@ function Title({
   onEnter,
   onNav,
   onName,
+  muted,
+  onToggleMute,
 }: {
   save: SaveData;
   nameDraft: string;
@@ -303,6 +359,8 @@ function Title({
   onEnter: () => void;
   onNav: (s: Screen) => void;
   onName: () => void;
+  muted: boolean;
+  onToggleMute: () => void;
 }) {
   return (
     <div className="relative min-h-dvh">
@@ -316,9 +374,12 @@ function Title({
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-3xl flex-col px-5 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between">
           <span className="text-[11px] uppercase tracking-[0.22em] text-muted">Eternal Haven · Δ9</span>
-          <Button variant="quiet" size="icon" onClick={() => onNav("settings")} aria-label="Settings">
-            <Settings className="size-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <MuteButton muted={muted} onToggle={onToggleMute} />
+            <Button variant="quiet" size="icon" onClick={() => onNav("settings")} aria-label="Settings">
+              <Settings className="size-4" />
+            </Button>
+          </div>
         </div>
         <div className="mt-10 sm:mt-16">
           <p className="text-[11px] uppercase tracking-[0.28em] text-accent">Collectible card lattice</p>
@@ -371,14 +432,27 @@ function Title({
   );
 }
 
-function Subpage({ title, onBack, children }: { title: string; onBack: () => void; children: ReactNode }) {
+function Subpage({
+  title,
+  onBack,
+  muted,
+  onToggleMute,
+  children,
+}: {
+  title: string;
+  onBack: () => void;
+  muted: boolean;
+  onToggleMute: () => void;
+  children: ReactNode;
+}) {
   return (
     <div className="mx-auto max-w-3xl px-4 pb-16 pt-[max(0.75rem,env(safe-area-inset-top))]">
       <div className="flex items-center gap-2 mb-6">
         <Button variant="ghost" size="sm" onClick={onBack}>
           Back
         </Button>
-        <h2 className="font-display text-3xl">{title}</h2>
+        <h2 className="font-display text-3xl flex-1">{title}</h2>
+        <MuteButton muted={muted} onToggle={onToggleMute} />
       </div>
       {children}
     </div>
@@ -798,16 +872,69 @@ function Codex() {
 function SettingsPane({
   save,
   setSave,
+  patchSettings,
   nameDraft,
   setNameDraft,
 }: {
   save: SaveData;
   setSave: (s: SaveData) => void;
+  patchSettings: (p: Partial<SaveData["settings"]>) => void;
   nameDraft: string;
   setNameDraft: (v: string) => void;
 }) {
+  const { muted, sfxOn, musicOn, sfx, music, shake, difficulty } = save.settings;
   return (
     <div className="space-y-5 max-w-md">
+      <section className="space-y-3">
+        <h3 className="font-display text-2xl">Sound</h3>
+        <SoundSwitch
+          on={!muted}
+          onChange={(on) => {
+            unlockAudio();
+            setMuted(!on);
+            patchSettings({ muted: !on });
+            if (on) sfxPlay("ui");
+          }}
+          label={muted ? "Sound off" : "Sound on"}
+          hint={muted ? "Chimes and lattice drone are silent." : "Chimes and lattice drone are live."}
+        />
+        <VolumeRow
+          label="Chimes"
+          value={sfx}
+          enabled={sfxOn}
+          disabled={muted}
+          icon={Volume2}
+          onEnabled={(v) => {
+            unlockAudio();
+            setSfxOn(v);
+            patchSettings({ sfxOn: v });
+            if (v && !muted) sfxPlay("ui");
+          }}
+          onChange={(v) => {
+            unlockAudio();
+            setSfxVolume(v);
+            patchSettings({ sfx: v });
+            if (!muted && sfxOn) sfxPlay("ui");
+          }}
+        />
+        <VolumeRow
+          label="Lattice drone"
+          value={music}
+          enabled={musicOn}
+          disabled={muted}
+          icon={Music}
+          onEnabled={(v) => {
+            unlockAudio();
+            setMusicOn(v);
+            patchSettings({ musicOn: v });
+          }}
+          onChange={(v) => {
+            unlockAudio();
+            setMusicVolume(v);
+            patchSettings({ music: v });
+          }}
+        />
+      </section>
       <label className="block text-sm">
         Operator name
         <input
@@ -817,54 +944,18 @@ function SettingsPane({
           className="mt-1 h-11 w-full rounded-[12px] bg-raised hairline px-3"
         />
       </label>
-      <label className="block text-sm">
-        Chimes {Math.round(save.settings.sfx * 100)}
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={save.settings.sfx}
-          onChange={(e) => {
-            const sfx = Number(e.target.value);
-            setSfxVolume(sfx);
-            setSave({ ...save, settings: { ...save.settings, sfx } });
-          }}
-          className="mt-2 w-full"
-        />
-      </label>
-      <label className="block text-sm">
-        Drone {Math.round(save.settings.music * 100)}
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={save.settings.music}
-          onChange={(e) => {
-            const music = Number(e.target.value);
-            setMusicVolume(music);
-            setSave({ ...save, settings: { ...save.settings, music } });
-          }}
-          className="mt-2 w-full"
-        />
-      </label>
-      <label className="flex items-center justify-between text-sm">
-        Lattice shake
-        <input
-          type="checkbox"
-          checked={save.settings.shake}
-          onChange={(e) => setSave({ ...save, settings: { ...save.settings, shake: e.target.checked } })}
-        />
-      </label>
+      <SoundSwitch
+        on={shake}
+        onChange={(v) => patchSettings({ shake: v })}
+        label="Lattice shake"
+        hint="Board pulse when you take damage."
+      />
       <label className="block text-sm">
         AI pressure
         <select
           className="mt-1 h-11 w-full rounded-[12px] bg-raised hairline px-3"
-          value={save.settings.difficulty}
-          onChange={(e) =>
-            setSave({ ...save, settings: { ...save.settings, difficulty: e.target.value as Difficulty } })
-          }
+          value={difficulty}
+          onChange={(e) => patchSettings({ difficulty: e.target.value as Difficulty })}
         >
           <option value="easy">Gentle</option>
           <option value="normal">Measured</option>

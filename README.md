@@ -2,19 +2,31 @@
 
 **Δ9Φ963 · DeepSeekOracle / Excavationpro / Lightfather**
 
-## Play / hubs (live)
+## Play (full game — standalone)
+
+- https://chatagent.ca/games/eternal-lattice/
+- https://eternalhaven.ca/games/eternal-lattice/
+- GitHub Pages: https://deepseekoracle.github.io/lygoeternallattice/
+- Backup: https://lygoeternallattice.grok.me/
+
+## Hub / docs
 
 - https://chatagent.ca/lygo-eternal-lattice.html
 - https://eternalhaven.ca/lygo-eternal-lattice.html
-- GitHub Pages: https://deepseekoracle.github.io/lygoeternallattice/
 
-## Source
+## Build (static SPA)
 
-This repository is the app source (TanStack Start / Vite). Hub pages above are the public static playable landings wired into the LYGO lattice sites.
+```bash
+npm install
+npm run build:static   # -> dist-static/
+npm run dev:static
+```
+
+Source lives under `D:\\LYGO APPS\\eternal-lattice` (and this repo). Static build needs no TanStack Start server.
 
 ## Related
 
-- Companion game: https://github.com/DeepSeekOracle/LYGOapps
+- Companion: https://github.com/DeepSeekOracle/LYGOapps
 - Protocol stack: https://github.com/DeepSeekOracle/lygo-protocol-stack
 - ClawHub: https://clawhub.ai/deepseekoracle
 - SkillHub: https://chatagent.ca/lygoskillhub.html

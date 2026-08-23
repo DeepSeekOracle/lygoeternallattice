@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@source "../src/**/*.{ts,tsx,js,jsx}";
+@source "../static/**/*.{ts,tsx,html}";
 
 @theme {
   --color-bg: #07080c;
@@ -149,4 +151,82 @@
 }
 .scroll-none::-webkit-scrollbar {
   display: none;
+}
+
+.card-playable {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-accent) 55%, transparent),
+    0 10px 22px rgba(0, 0, 0, 0.4);
+}
+
+.card-sheen::after,
+.card-foil::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    color-mix(in oklab, var(--color-ivory) 14%, transparent) 48%,
+    transparent 62%
+  );
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+
+.card-foil::after {
+  background: linear-gradient(
+    115deg,
+    transparent 22%,
+    color-mix(in oklab, var(--color-accent) 18%, transparent) 42%,
+    color-mix(in oklab, var(--color-ivory) 16%, transparent) 58%,
+    transparent 72%
+  );
+  opacity: 0.7;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-fg) 16%, transparent);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-bg);
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+}
+
+input[type="range"]:disabled {
+  opacity: 0.35;
+}
+
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--color-bg), 0 0 0 5px color-mix(in oklab, var(--color-accent) 55%, transparent);
 }
