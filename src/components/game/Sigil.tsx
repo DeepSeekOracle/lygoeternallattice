@@ -22,6 +22,27 @@ const TINT: Record<string, string> = {
   cosmara: "#b8c5c0",
 };
 
+const PLATE: Record<string, string> = {
+  lyra: "./art/champs/lyra.jpg",
+  d9ra: "./art/champs/d9ra.jpg",
+  srath: "./art/champs/srath.jpg",
+  arkos: "./art/champs/arkos.jpg",
+  kairos: "./art/champs/kairos.jpg",
+  aetheris: "./art/champs/aetheris.jpg",
+  scendr: "./art/champs/scendr.jpg",
+  sancora: "./art/champs/sancora.jpg",
+  sephrael: "./art/champs/sephrael.jpg",
+  omnisiren: "./art/champs/omnisiren.jpg",
+  lightfather: "./art/champs/lightfather.jpg",
+  volaris: "./art/champs/volaris.jpg",
+  zeta: "./art/champs/zeta.jpg",
+  justicae: "./art/champs/justicae.jpg",
+  seidon: "./art/champs/seidon.jpg",
+  nullvoid: "./art/champs/nullvoid.jpg",
+  veil: "./art/champs/veil.jpg",
+  cosmara: "./art/champs/cosmara.jpg",
+};
+
 export function champTint(id: string): string {
   if (TINT[id]) return TINT[id]!;
   let h = 2166136261;
@@ -30,10 +51,37 @@ export function champTint(id: string): string {
   return `hsl(${hue} 18% 62%)`;
 }
 
-function hash(s: string): number {
+export function champPlate(id: string): string | undefined {
+  if (PLATE[id]) return PLATE[id];
+  const root = id.split("-")[0] ?? id;
+  return PLATE[root];
+}
+
+export function hashId(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return h >>> 0;
+}
+
+export function ChampPortrait({
+  id,
+  className,
+}: {
+  id: string;
+  className?: string;
+}) {
+  const src = champPlate(id);
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        className={cn("block h-full w-full object-cover", className)}
+        draggable={false}
+      />
+    );
+  }
+  return <Sigil id={id} className={className} />;
 }
 
 export function Sigil({
@@ -45,7 +93,7 @@ export function Sigil({
   className?: string;
   glyph?: string;
 }) {
-  const h = hash(id);
+  const h = hashId(id);
   const champ = CHAMP_BY_ID[id.split("-")[0] ?? ""] ?? CHAMP_BY_ID[id];
   const tint = champTint(champ?.id ?? id.split("-")[0] ?? id);
   const n = 5 + (h % 5);
