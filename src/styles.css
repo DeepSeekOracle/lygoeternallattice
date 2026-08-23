@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #07080c;
+  --color-surface: #101218;
+  --color-raised: #171a22;
+  --color-fg: #e8ebe6;
+  --color-muted: #8b928a;
+  --color-subtle: #6a706c;
+  --color-accent: #7ec8c0;
+  --color-accent-dim: #4d7f7a;
+  --color-border: #262a32;
+  --color-danger: #c45c5c;
+  --color-danger-fg: #f4e8e8;
+  --color-ivory: #d5d0c4;
+  --font-display: "Cormorant Garamond", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-sans: "Outfit", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  html,
+  body,
+  #app {
+    min-height: 100%;
+    background: var(--color-bg);
+    color: var(--color-fg);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.starfield {
+  background-color: #07080c;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(126, 200, 192, 0.08), transparent 55%),
+    radial-gradient(1px 1px at 12% 22%, rgba(232, 235, 230, 0.55), transparent),
+    radial-gradient(1px 1px at 28% 68%, rgba(232, 235, 230, 0.35), transparent),
+    radial-gradient(1px 1px at 44% 18%, rgba(126, 200, 192, 0.45), transparent),
+    radial-gradient(1.5px 1.5px at 63% 40%, rgba(232, 235, 230, 0.4), transparent),
+    radial-gradient(1px 1px at 81% 72%, rgba(126, 200, 192, 0.4), transparent),
+    radial-gradient(1px 1px at 91% 16%, rgba(232, 235, 230, 0.3), transparent),
+    radial-gradient(1px 1px at 8% 88%, rgba(232, 235, 230, 0.25), transparent);
+}
+
+.card-pop {
+  animation: card-pop 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes card-pop {
+  from {
+    transform: translateY(10px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.shake-board {
+  animation: shake-board 420ms ease-out;
+}
+
+@keyframes shake-board {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  20% {
+    transform: translate3d(-4px, 1px, 0);
+  }
+  40% {
+    transform: translate3d(5px, -2px, 0);
+  }
+  60% {
+    transform: translate3d(-3px, 0, 0);
+  }
+  80% {
+    transform: translate3d(3px, 1px, 0);
+  }
+}
+
+.float-dmg {
+  animation: float-dmg 700ms ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes float-dmg {
+  from {
+    transform: translateY(0) scale(0.8);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-28px) scale(1);
+    opacity: 0;
+  }
+}
+
+.scrim {
+  background: color-mix(in oklab, var(--color-bg) 78%, transparent);
+}
+
+.hairline {
+  border: 1px solid color-mix(in oklab, var(--color-fg) 12%, transparent);
+}
+
+.scroll-none {
+  scrollbar-width: none;
+}
+.scroll-none::-webkit-scrollbar {
+  display: none;
+}
