@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 const KEY = "lygo-hub-radio-open";
 
 let open = false;
+let playing = false;
 try {
   open = sessionStorage.getItem(KEY) === "1";
 } catch {
@@ -20,10 +21,6 @@ function emit() {
   listeners.forEach((fn) => fn());
 }
 
-export function isRadioOpen() {
-  return open;
-}
-
 export function setRadioOpen(v: boolean) {
   if (open === v) return;
   open = v;
@@ -34,14 +31,24 @@ export function toggleRadio() {
   setRadioOpen(!open);
 }
 
-export function useRadioOpen() {
-  const [v, setV] = useState(open);
+export function setRadioPlaying(v: boolean) {
+  if (playing === v) return;
+  playing = v;
+  emit();
+}
+
+export function useRadioUi() {
+  const [state, setState] = useState({ open, playing });
   useEffect(() => {
-    const fn = () => setV(open);
+    const fn = () => setState({ open, playing });
     listeners.add(fn);
     return () => {
       listeners.delete(fn);
     };
   }, []);
-  return v;
+  return state;
+}
+
+export function useRadioOpen() {
+  return useRadioUi().open;
 }

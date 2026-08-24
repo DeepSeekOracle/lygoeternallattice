@@ -1,6 +1,6 @@
 import { Radio, Volume2, VolumeX, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toggleRadio, useRadioOpen } from "@/lib/radio-ui";
+import { toggleRadio, useRadioUi } from "@/lib/radio-ui";
 import { cn } from "@/lib/utils";
 
 export function MuteButton({
@@ -28,7 +28,7 @@ export function MuteButton({
 }
 
 export function RadioToggle({ className }: { className?: string }) {
-  const open = useRadioOpen();
+  const { open, playing } = useRadioUi();
   return (
     <Button
       variant="quiet"
@@ -36,10 +36,10 @@ export function RadioToggle({ className }: { className?: string }) {
       onClick={toggleRadio}
       aria-label={open ? "Hide radio" : "Show radio"}
       aria-pressed={open}
-      title={open ? "Hide radio" : "Show radio"}
+      title={open ? "Hide radio (keeps playing)" : playing ? "Show radio (playing)" : "Show radio"}
       className={className}
     >
-      <Radio className={cn("size-4", open && "text-accent")} />
+      <Radio className={cn("size-4", (open || playing) && "text-accent")} />
     </Button>
   );
 }
