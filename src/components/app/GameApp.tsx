@@ -17,6 +17,7 @@ import { MatchView } from "@/components/game/MatchView";
 import { CardFace } from "@/components/game/CardFace";
 import { Sigil, champTint } from "@/components/game/Sigil";
 import { MuteButton, SoundSwitch, VolumeRow } from "@/components/game/SoundControls";
+import { RadioMini } from "@/components/app/RadioMini";
 import { MISSIONS } from "@/lib/game/campaign";
 import { CARD_BY_ID, CARDS, CHAMP_BY_ID, CHAMPIONS, defaultList, deckIssues, KEYWORD_TEXT } from "@/lib/game/catalog";
 import { createMatch } from "@/lib/game/engine";
@@ -185,15 +186,18 @@ export function GameApp() {
 
   if (screen === "match" && match) {
     return (
-      <MatchView
-        initial={match}
-        difficulty={save.settings.difficulty}
-        onExit={onMatchExit}
-        banner={matchBanner}
-        shakeOn={save.settings.shake}
-        muted={save.settings.muted}
-        onToggleMute={toggleSound}
-      />
+      <>
+        <MatchView
+          initial={match}
+          difficulty={save.settings.difficulty}
+          onExit={onMatchExit}
+          banner={matchBanner}
+          shakeOn={save.settings.shake}
+          muted={save.settings.muted}
+          onToggleMute={toggleSound}
+        />
+        <RadioMini />
+      </>
     );
   }
 
@@ -337,6 +341,7 @@ export function GameApp() {
           {toast}
         </button>
       )}
+      <RadioMini />
     </div>
   );
 }
