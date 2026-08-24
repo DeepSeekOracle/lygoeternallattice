@@ -37,9 +37,11 @@ import { defaultSave, loadSave, recordRanked, writeSave, type CustomDeck, type S
 import { asset } from "@/lib/asset";
 import { cn } from "@/lib/utils";
 
+const ALL_SEATS = CHAMPIONS.map((c) => c.id);
+
 const MODES: { id: Screen; label: string; hint: string; icon: typeof Swords }[] = [
-  { id: "campaign", label: "Campaign", hint: "Unlock the fifteen seats", icon: MapIcon },
-  { id: "skirmish", label: "Skirmish", hint: "Any unlocked deck vs AI", icon: Swords },
+  { id: "campaign", label: "Campaign", hint: "Unlock the fifteen seats, one chapter at a time", icon: MapIcon },
+  { id: "skirmish", label: "Skirmish", hint: "Any council deck vs AI", icon: Swords },
   { id: "ranked", label: "Ranked", hint: "All decks · local ladder", icon: Trophy },
   { id: "hotseat", label: "Hot-seat", hint: "Two players, one device", icon: Users },
   { id: "lobby", label: "Lattice Link", hint: "Casual peer lobby", icon: Wifi },
@@ -225,13 +227,13 @@ export function GameApp() {
           {screen === "campaign" && (
             <Campaign save={save} onPlay={(m) => {
               const opp = m.opponent;
-              const me = m.player ?? pickA;
+              const me = m.player ?? (save.unlocked.includes(pickA) ? pickA : "lyra");
               begin(me, opp, [true, false], [you, CHAMP_BY_ID[opp]?.name ?? "AI"], "campaign", m.title, undefined, m.id);
             }} pickA={pickA} setPickA={setPickA} />
           )}
           {screen === "skirmish" && (
             <DeckPick
-              unlocked={save.unlocked}
+              unlocked={ALL_SEATS}
               a={pickA}
               b={pickB}
               setA={setPickA}
@@ -259,7 +261,7 @@ export function GameApp() {
           )}
           {screen === "hotseat" && (
             <DeckPick
-              unlocked={CHAMPIONS.map((c) => c.id)}
+              unlocked={ALL_SEATS}
               a={pickA}
               b={pickB}
               setA={setPickA}
@@ -301,7 +303,7 @@ export function GameApp() {
               }}
               onPlay={() => {
                 if (!forged) return;
-                const opp = save.unlocked[Math.floor(Math.random() * save.unlocked.length)] ?? "lyra";
+                const opp = ALL_SEATS[Math.floor(Math.random() * ALL_SEATS.length)] ?? "lyra";
                 begin(
                   forged.champion.id,
                   opp,
@@ -425,7 +427,7 @@ function Title({
           ))}
         </div>
         <p className="mt-auto pt-8 text-[11px] text-subtle">
-          {save.unlocked.length} seals unlocked · rating {save.rating} · {save.wins}–{save.losses}
+          Campaign {save.campaignDone.length}/{MISSIONS.length} · rating {save.rating} · {save.wins}–{save.losses}
         </p>
       </div>
     </div>
@@ -509,7 +511,7 @@ function Campaign({
     <div className="space-y-4">
       <img src={asset("art/star-chart.jpg")} alt="" className="w-full rounded-[20px] hairline object-cover h-36" crossOrigin="anonymous" />
       <p className="text-sm text-muted">
-        Walk the council galaxies. Winning a chapter unlocks that Champion for Skirmish and the Deckwright.
+        Walk the council galaxies one seat at a time. Other modes already have every deck. Winning a chapter opens the next campaign mission and that Champion&apos;s campaign seat.
       </p>
       <div>
         <p className="text-xs text-muted mb-2">Your seat</p>
@@ -566,7 +568,7 @@ function DeckPick({
   customs: CustomDeck[];
   you: string;
 }) {
-  const list = CHAMPIONS.filter((c) => unlocked.includes(c.id) || unlocked.length >= 18);
+  const list = CHAMPIONS.filter((c) => unlocked.includes(c.id));
   return (
     <div className="grid sm:grid-cols-2 gap-6">
       <div>
@@ -695,9 +697,7 @@ function Builder({
   setName: (n: string) => void;
   onSave: (d: CustomDeck) => void;
 }) {
-  const pool = CARDS.filter(
-    (c) => c.championId === champ || (c.championId === "cosmara" && save.unlocked.includes("cosmara")),
-  );
+  const pool = CARDS.filter((c) => c.championId === champ || c.championId === "cosmara");
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   function set(id: string, n: number) {
     const next = { ...counts, [id]: Math.max(0, Math.min(2, n)) };
@@ -708,7 +708,7 @@ function Builder({
     <div className="space-y-4">
       <p className="text-sm text-muted">
         Exactly 29 minions and spells plus your Champion (30). Max two copies. Theme-locked, with COSMARA as lattice-shared
-        once unlocked.
+        in every mode except campaign (campaign still unlocks seats one by one).
       </p>
       <input
         value={name}
@@ -717,7 +717,7 @@ function Builder({
         maxLength={32}
       />
       <div className="space-y-2">
-        {CHAMPIONS.filter((c) => save.unlocked.includes(c.id)).map((c) => (
+        {CHAMPIONS.map((c) => (
           <ChampRow
             key={c.id}
             c={c}
