@@ -131,6 +131,10 @@ export function autoBlocks(s: MatchState): MatchState {
   while (cur.phase === "block" && cur.winner === null && guard++ < 24) {
     const a = pickAction(cur, "normal");
     cur = applyAction(cur, a);
+    if (a.type === "confirmBlock") break;
+  }
+  if (cur.phase === "block" && cur.winner === null) {
+    cur = applyAction(cur, { type: "confirmBlock" });
   }
   return cur;
 }

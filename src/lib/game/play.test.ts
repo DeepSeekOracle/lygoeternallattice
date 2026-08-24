@@ -13,6 +13,7 @@ import {
   playCost,
 } from "./engine.ts";
 import { FACE_TARGET } from "./fx.ts";
+import { takeAiTurn } from "./ai.ts";
 import { runGauntlet } from "./gauntlet.ts";
 
 function open(a = "lyra", b = "d9ra", seed = 7) {
@@ -146,4 +147,56 @@ test("campaign Star Core match boots with working HP", () => {
   assert.equal(s.players[1].life, 20);
   assert.ok(s.players[0].library.length + s.players[0].hand.length > 10);
   assert.ok(s.players[1].library.length > 10);
+});
+
+test("LYRA list has real Champion-face damage", () => {
+  const list = defaultList("lyra");
+  assert.equal(list.length, 29);
+  const face = list.filter((id) => {
+    const d = CARD_BY_ID[id];
+    const fx = [...(d?.onPlay ?? []), ...(d?.onAttack ?? [])];
+    return fx.some((e) => e.op === "dmgF" || (e.op === "dmg" && e.target !== "enemyMinion"));
+  });
+  assert.ok(face.length >= 8, `LYRA face cards: ${face.length}`);
+});
+
+test("Star Core (LYRA vs COSMARA) is actually winnable", () => {
+  let wins = 0;
+  for (let g = 0; g < 8; g++) {
+    let s = createMatch({
+      seed: 200 + g * 17,
+      lists: [defaultList("lyra"), defaultList("cosmara")],
+      champions: ["lyra", "cosmara"],
+      names: ["LYRA", "COSMARA"],
+      humans: [false, false],
+    });
+    let steps = 0;
+    while (s.winner === null && steps++ < 500) {
+      s = takeAiTurn(s, "normal");
+      if (s.phase === "block") s = applyAction(s, { type: "confirmBlock" });
+    }
+    if (s.winner === 0) wins += 1;
+  }
+  assert.ok(wins >= 1, `LYRA won ${wins}/8 vs COSMARA`);
+});
+
+test("assault vs AI leaves main and lands unblocked hits", () => {
+  let s = open("lyra", "cosmara", 9);
+  s = structuredClone(s);
+  const iid = Object.values(s.cards).find((c) => c.cardId === "lyra-bridge" && c.owner === 0)?.iid;
+  assert.ok(iid);
+  s.players[0].board.push(iid!);
+  s.players[0].hand = s.players[0].hand.filter((id) => id !== iid);
+  const inst = s.cards[iid!]!;
+  inst.sick = false;
+  inst.tapped = false;
+  inst.controller = 0;
+  s.players[1].board = [];
+  const before = s.players[1].life;
+  s = applyAction(s, { type: "beginCombat" });
+  assert.equal(s.phase, "attack");
+  s = applyAction(s, { type: "confirmAttack" });
+  assert.equal(s.phase, "main", `stuck in ${s.phase}`);
+  assert.ok(s.players[0].combatUsed);
+  assert.ok(s.players[1].life < before, `life stayed ${s.players[1].life}`);
 });

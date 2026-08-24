@@ -81,7 +81,9 @@ export function MatchView({
     thinking.current = true;
     setLocked(true);
     const ms = difficulty === "easy" ? 380 : difficulty === "hard" ? 640 : 480;
+    let cancelled = false;
     const t = window.setTimeout(() => {
+      if (cancelled) return;
       setS((cur) => {
         if (cur.winner !== null) return cur;
         const who: 0 | 1 = cur.phase === "block" ? (cur.active === 0 ? 1 : 0) : cur.active;
@@ -90,9 +92,12 @@ export function MatchView({
           if (cur.phase === "block") {
             let n = cur;
             let g = 0;
-            while (n.phase === "block" && n.winner === null && g++ < 20) {
-              n = applyAction(n, pickAction(n, difficulty));
+            while (n.phase === "block" && n.winner === null && g++ < 12) {
+              const actn = pickAction(n, difficulty);
+              n = applyAction(n, actn);
+              if (actn.type === "confirmBlock") break;
             }
+            if (n.phase === "block") n = applyAction(n, { type: "confirmBlock" });
             return n;
           }
           return takeAiTurn(cur, difficulty);
@@ -103,7 +108,11 @@ export function MatchView({
       thinking.current = false;
       setLocked(false);
     }, ms);
-    return () => window.clearTimeout(t);
+    return () => {
+      cancelled = true;
+      thinking.current = false;
+      window.clearTimeout(t);
+    };
   }, [s, difficulty]);
 
   useEffect(() => {

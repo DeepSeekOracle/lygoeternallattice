@@ -675,6 +675,47 @@ function endTurn(s: MatchState) {
   startTurn(s, opp(p));
 }
 
+function autoAssignBlocks(s: MatchState) {
+  const defP = opp(s.active);
+  const used = new Set<string>();
+  for (const a of s.attackers) {
+    const atk = s.cards[a];
+    if (!atk) continue;
+    const ap = currentPower(s, atk);
+    let best: string | null = null;
+    let bestScore = 0;
+    for (const b of s.players[defP].board) {
+      if (used.has(b)) continue;
+      const blk = s.cards[b];
+      if (!blk || blk.tapped) continue;
+      if (atk.keywords.includes("latticeWalk") && !blk.keywords.includes("latticeWalk")) continue;
+      const kills = currentPower(s, blk) >= currentTough(atk);
+      const dies = ap >= currentTough(blk);
+      let sc = 0;
+      if (kills && !dies) sc = 6;
+      else if (kills && dies) sc = 3;
+      else if (!dies) sc = 1;
+      else sc = ap >= 4 ? 2 : 0;
+      if (sc > bestScore) {
+        bestScore = sc;
+        best = b;
+      }
+    }
+    if (best) {
+      s.blocks[a] = best;
+      used.add(best);
+    }
+  }
+}
+
+function defenderCanBlock(s: MatchState): boolean {
+  const defP = opp(s.active);
+  return s.players[defP].board.some((id) => {
+    const blk = s.cards[id];
+    return !!blk && !blk.tapped;
+  });
+}
+
 function resolveCombat(s: MatchState) {
   const atkP = s.active;
   const defP = opp(atkP);
@@ -822,9 +863,14 @@ export function applyAction(state: MatchState, action: Action): MatchState {
           resolveEffects(s, p, cdef.onAttack, atk);
         }
       }
-      s.phase = "block";
       s.blocks = {};
+      s.phase = "block";
       log(s, `${s.attackers.length} assault(s).`, p);
+      // AI defenders (or no legal seals) never sit in block — hits must land.
+      if (!s.humans[opp(p)] || !defenderCanBlock(s)) {
+        if (!s.humans[opp(p)]) autoAssignBlocks(s);
+        resolveCombat(s);
+      }
       break;
     case "setBlock":
       if (s.phase !== "block") break;
