@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Pause, Play, Radio, SkipForward } from "lucide-react";
+import { Pause, Play, Radio, SkipForward, X } from "lucide-react";
 import { asset } from "@/lib/asset";
+import { setRadioOpen, useRadioOpen } from "@/lib/radio-ui";
 import { cn } from "@/lib/utils";
 
 const HUB = "https://deepseekoracle.github.io/Excavationpro/excavationpro-listen.html";
@@ -8,6 +9,7 @@ const HUB = "https://deepseekoracle.github.io/Excavationpro/excavationpro-listen
 type Track = { title: string; url: string };
 
 export function RadioMini() {
+  const open = useRadioOpen();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bagRef = useRef<Track[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -45,6 +47,13 @@ export function RadioMini() {
     };
   }, [tracks]);
 
+  useEffect(() => {
+    if (!open) {
+      audioRef.current?.pause();
+      setOn(false);
+    }
+  }, [open]);
+
   function playRandom(el: HTMLAudioElement) {
     if (!bagRef.current.length) bagRef.current = shuffle(tracks);
     const t = bagRef.current.pop();
@@ -78,6 +87,15 @@ export function RadioMini() {
     playRandom(el);
   }
 
+  function hide() {
+    const el = audioRef.current;
+    if (el) el.pause();
+    setOn(false);
+    setRadioOpen(false);
+  }
+
+  if (!open) return null;
+
   return (
     <div className="fixed bottom-3 left-3 z-[70] max-w-[min(22rem,calc(100vw-1.5rem))] rounded-[14px] bg-surface/95 hairline px-2.5 py-2 shadow-[0_12px_40px_rgba(0,0,0,.45)]">
       <audio ref={audioRef} preload="none" />
@@ -107,6 +125,14 @@ export function RadioMini() {
           onClick={skip}
         >
           <SkipForward className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          className="size-8 shrink-0 rounded-full hairline bg-raised flex items-center justify-center text-fg"
+          aria-label="Hide radio"
+          onClick={hide}
+        >
+          <X className="size-3.5" />
         </button>
       </div>
       {err && <p className="text-[10px] text-danger mt-1 px-0.5">{err}</p>}

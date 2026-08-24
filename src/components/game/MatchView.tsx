@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, BookOpen, Heart, Shield, Swords, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MuteButton } from "@/components/game/SoundControls";
+import { MuteButton, RadioToggle } from "@/components/game/SoundControls";
 import { CARD_BY_ID, CHAMP_BY_ID } from "@/lib/game/catalog";
 import { pickAction, takeAiTurn } from "@/lib/game/ai";
 import {
@@ -374,6 +374,7 @@ export function MatchView({
           <div className="font-display text-lg leading-none truncate">{oPl.name}</div>
         </div>
         <MuteButton muted={muted} onToggle={onToggleMute} className="size-10" />
+        <RadioToggle className="size-10" />
         <button
           type="button"
           onClick={() => {

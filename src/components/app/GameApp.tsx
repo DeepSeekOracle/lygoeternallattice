@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { MatchView } from "@/components/game/MatchView";
 import { CardFace } from "@/components/game/CardFace";
 import { Sigil, champTint } from "@/components/game/Sigil";
-import { MuteButton, SoundSwitch, VolumeRow } from "@/components/game/SoundControls";
+import { MuteButton, RadioToggle, SoundSwitch, VolumeRow } from "@/components/game/SoundControls";
 import { RadioMini } from "@/components/app/RadioMini";
 import { MISSIONS } from "@/lib/game/campaign";
 import { CARD_BY_ID, CARDS, CHAMP_BY_ID, CHAMPIONS, defaultList, deckIssues, KEYWORD_TEXT } from "@/lib/game/catalog";
@@ -383,6 +383,7 @@ function Title({
           <span className="text-[11px] uppercase tracking-[0.22em] text-muted">Eternal Haven · Δ9</span>
           <div className="flex items-center gap-1">
             <MuteButton muted={muted} onToggle={onToggleMute} />
+            <RadioToggle />
             <Button variant="quiet" size="icon" onClick={() => onNav("settings")} aria-label="Settings">
               <Settings className="size-4" />
             </Button>
@@ -460,6 +461,7 @@ function Subpage({
         </Button>
         <h2 className="font-display text-3xl flex-1">{title}</h2>
         <MuteButton muted={muted} onToggle={onToggleMute} />
+        <RadioToggle />
       </div>
       {children}
     </div>
