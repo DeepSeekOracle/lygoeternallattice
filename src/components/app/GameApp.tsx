@@ -15,10 +15,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { MatchView } from "@/components/game/MatchView";
 import { CardFace } from "@/components/game/CardFace";
-import { Sigil, champTint } from "@/components/game/Sigil";
+import { ChampPortrait, Sigil, champTint } from "@/components/game/Sigil";
+import {
+  StudioBackdrop,
+  StudioChip,
+  StudioMark,
+  StudioNextUp,
+  StudioPanel,
+  StudioPortrait,
+  StudioPortraitRow,
+  StudioProgress,
+  StudioSection,
+  StudioStats,
+  StudioTile,
+} from "@/components/app/StudioUI";
 import { MuteButton, RadioToggle, SoundSwitch, VolumeRow } from "@/components/game/SoundControls";
 import { RadioMini } from "@/components/app/RadioMini";
-import { MISSIONS } from "@/lib/game/campaign";
+import { MISSIONS, type Mission } from "@/lib/game/campaign";
 import { CARD_BY_ID, CARDS, CHAMP_BY_ID, CHAMPIONS, defaultList, deckIssues, KEYWORD_TEXT } from "@/lib/game/catalog";
 import { createMatch } from "@/lib/game/engine";
 import { forgeChampion } from "@/lib/game/procedural";
@@ -180,6 +193,14 @@ export function GameApp() {
 
   const you = save.playerName.trim() || "Operator";
 
+  function playMission(m: Mission) {
+    const opp = m.opponent;
+    const me = m.player ?? (save.unlocked.includes(pickA) ? pickA : "lyra");
+    begin(me, opp, [true, false], [you, CHAMP_BY_ID[opp]?.name ?? "AI"], "campaign", m.title, undefined, m.id);
+  }
+
+  const nextMission = MISSIONS.find((m) => !save.campaignDone.includes(m.id)) ?? null;
+
   if (!hydrated) {
     return <div className="h-dvh bg-bg" />;
   }
@@ -195,6 +216,29 @@ export function GameApp() {
           shakeOn={save.settings.shake}
           muted={save.settings.muted}
           onToggleMute={toggleSound}
+          nextLabel={
+            matchMode === "campaign" && nextMission ? `Next · ${nextMission.title}` : undefined
+          }
+          onNext={
+            matchMode === "campaign" && nextMission
+              ? () => {
+                  const m = nextMission;
+                  setMatch(null);
+                  setScreen("campaign");
+                  window.setTimeout(() => playMission(m), 0);
+                }
+              : undefined
+          }
+          onRetry={
+            matchMode === "campaign" && missionId
+              ? () => {
+                  const m = MISSIONS.find((x) => x.id === missionId);
+                  setMatch(null);
+                  if (m) window.setTimeout(() => playMission(m), 0);
+                  else setScreen("campaign");
+                }
+              : undefined
+          }
         />
         <RadioMini />
       </>
@@ -217,6 +261,7 @@ export function GameApp() {
             else setScreen(id);
           }}
           onName={() => patch({ playerName: nameDraft.trim().slice(0, 24) })}
+          onQuickPlay={playMission}
           muted={save.settings.muted}
           onToggleMute={toggleSound}
         />
@@ -229,11 +274,7 @@ export function GameApp() {
           onToggleMute={toggleSound}
         >
           {screen === "campaign" && (
-            <Campaign save={save} onPlay={(m) => {
-              const opp = m.opponent;
-              const me = m.player ?? (save.unlocked.includes(pickA) ? pickA : "lyra");
-              begin(me, opp, [true, false], [you, CHAMP_BY_ID[opp]?.name ?? "AI"], "campaign", m.title, undefined, m.id);
-            }} pickA={pickA} setPickA={setPickA} />
+            <Campaign save={save} onPlay={playMission} pickA={pickA} setPickA={setPickA} />
           )}
           {screen === "skirmish" && (
             <DeckPick
@@ -357,6 +398,7 @@ function Title({
   onEnter,
   onNav,
   onName,
+  onQuickPlay,
   muted,
   onToggleMute,
 }: {
@@ -366,21 +408,31 @@ function Title({
   onEnter: () => void;
   onNav: (s: Screen) => void;
   onName: () => void;
+  onQuickPlay: (m: Mission) => void;
   muted: boolean;
   onToggleMute: () => void;
 }) {
+  const done = save.campaignDone.length;
+  const idx = Math.min(MISSIONS.length - 1, Math.max(0, save.campaignIndex));
+  const next = MISSIONS.find((m) => !save.campaignDone.includes(m.id)) ?? MISSIONS[idx] ?? MISSIONS[0]!;
+  const complete = done >= MISSIONS.length;
+  const held = new Set(save.unlocked);
+  const stat = (id: Screen): string | undefined => {
+    if (id === "campaign") return `${done}/${MISSIONS.length}`;
+    if (id === "ranked") return String(save.rating);
+    if (id === "hotseat") return save.customDecks.length ? `${save.customDecks.length} seals` : undefined;
+    if (id === "lobby") return `W ${save.wins} · L ${save.losses}`;
+    return undefined;
+  };
   return (
     <div className="relative min-h-dvh">
-      <img
-        src={asset("art/title-bg.jpg")}
-        alt=""
-        className="absolute inset-0 h-full w-full object-cover opacity-70"
-        crossOrigin="anonymous"
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-bg/30 via-bg/55 to-bg" />
-      <div className="relative z-10 mx-auto flex min-h-dvh max-w-3xl flex-col px-5 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
+      <StudioBackdrop art="art/title-bg.jpg" dim={0.5} />
+      <div className="relative z-10 mx-auto flex min-h-dvh max-w-5xl flex-col px-5 pb-12 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-[0.22em] text-muted">Eternal Haven · Δ9</span>
+          <div className="flex items-center gap-3 text-accent">
+            <StudioMark />
+            <span className="text-[11px] uppercase tracking-[0.22em] text-muted">Eternal Haven · Δ9</span>
+          </div>
           <div className="flex items-center gap-1">
             <MuteButton muted={muted} onToggle={onToggleMute} />
             <RadioToggle />
@@ -389,51 +441,116 @@ function Title({
             </Button>
           </div>
         </div>
-        <div className="mt-10 sm:mt-16">
+
+        <div className="mt-10 sm:mt-14 max-w-2xl">
           <p className="text-[11px] uppercase tracking-[0.28em] text-accent">Collectible card lattice</p>
-          <h1 className="font-display text-5xl sm:text-7xl mt-2 leading-[0.95]">
+          <h1 className="font-display text-6xl sm:text-7xl mt-3 leading-[0.92] studio-hero-title">
             LYGO
-            <span className="block text-3xl sm:text-4xl text-ivory font-display mt-1">Eternal Lattice</span>
+            <span className="block text-3xl sm:text-4xl text-ivory font-display mt-2 tracking-tight">
+              Eternal Lattice
+            </span>
           </h1>
           <p className="mt-4 max-w-md text-muted text-sm sm:text-base">
             No lands. Each dawn the seal stacks +1 mana, to a height of twenty. Fifteen council Champions, shadow
             accords, and a lattice that remembers.
           </p>
         </div>
-        <div className="mt-8 flex flex-col sm:flex-row gap-2 max-w-md">
+
+        <div className="mt-7 flex flex-col sm:flex-row gap-2 max-w-md">
           <input
             value={nameDraft}
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={onName}
             placeholder="Operator name"
             maxLength={24}
-            className="h-11 flex-1 rounded-[12px] bg-raised hairline px-3 text-sm outline-none focus:ring-2 focus:ring-accent/50"
+            className="h-11 flex-1 rounded-[12px] bg-raised/80 hairline px-3 text-sm outline-none focus:ring-2 focus:ring-accent/50"
           />
           <Button variant="ghost" onClick={onName}>
             Seal name
           </Button>
         </div>
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {MODES.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => {
-                onEnter();
-                onNav(m.id);
-              }}
-              className="flex items-center gap-3 rounded-[16px] bg-surface/80 hairline px-4 py-3 text-left hover:bg-raised transition-colors"
-            >
-              <m.icon className="size-4 text-accent shrink-0" />
-              <span>
-                <span className="block font-medium">{m.label}</span>
-                <span className="block text-xs text-muted">{m.hint}</span>
-              </span>
-            </button>
-          ))}
+
+        <div className="mt-7">
+          <StudioNextUp
+            index={complete ? MISSIONS.length - 1 : MISSIONS.indexOf(next)}
+            total={MISSIONS.length}
+            title={complete ? "The lattice holds" : next.title}
+            story={
+              complete
+                ? "Every chapter is held, every seat sits the council. Skirmish, Ranked, and the Forge stay open for as long as the lattice remembers you."
+                : next.story
+            }
+            opponentId={next.opponent}
+            opponentName={CHAMP_BY_ID[next.opponent]?.name ?? "The lattice"}
+            cta={complete ? "Open the campaign" : done === 0 ? "Begin the campaign" : "Continue the campaign"}
+            done={complete}
+            onGo={() => {
+              onEnter();
+              if (complete) onNav("campaign");
+              else onQuickPlay(next);
+            }}
+          />
         </div>
-        <p className="mt-auto pt-8 text-[11px] text-subtle">
-          Campaign {save.campaignDone.length}/{MISSIONS.length} · rating {save.rating} · {save.wins}–{save.losses}
+
+        <div className="mt-4">
+          <StudioStats
+            items={[
+              { label: "Chapters held", value: `${done}/${MISSIONS.length}` },
+              { label: "Rating", value: String(save.rating) },
+              { label: "Record", value: `${save.wins}–${save.losses}` },
+              { label: "Seals cut", value: String(save.customDecks.length) },
+            ]}
+          />
+        </div>
+
+        <div className="mt-9">
+          <StudioSection title="Take a seat" hint="Every mode shares one lattice; choose how you want to arrive.">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {MODES.map((m) => (
+                <StudioTile
+                  key={m.id}
+                  icon={m.icon}
+                  title={m.label}
+                  hint={m.hint}
+                  stat={stat(m.id)}
+                  feature={m.id === "campaign"}
+                  progress={m.id === "campaign" ? { value: done, max: MISSIONS.length } : undefined}
+                  onClick={() => {
+                    onEnter();
+                    onNav(m.id);
+                  }}
+                />
+              ))}
+            </div>
+          </StudioSection>
+        </div>
+
+        <div className="mt-9">
+          <StudioSection
+            title="The council"
+            hint={`${held.size} of ${CHAMPIONS.length} seats answer the call. Win a chapter to open the seat beyond it.`}
+          >
+            <StudioPortraitRow>
+              {CHAMPIONS.map((c) => (
+                <StudioPortrait
+                  key={c.id}
+                  id={c.id}
+                  name={c.name}
+                  epithet={c.epithet}
+                  locked={!held.has(c.id)}
+                  selected={c.id === next.opponent}
+                  onClick={() => {
+                    onEnter();
+                    onNav("campaign");
+                  }}
+                />
+              ))}
+            </StudioPortraitRow>
+          </StudioSection>
+        </div>
+
+        <p className="mt-auto pt-10 text-[11px] text-subtle">
+          Lattice Link is casual peer play · ladder is local to this device · {save.games} matches remembered
         </p>
       </div>
     </div>
@@ -454,16 +571,19 @@ function Subpage({
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-3xl px-4 pb-16 pt-[max(0.75rem,env(safe-area-inset-top))]">
-      <div className="flex items-center gap-2 mb-6">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          Back
-        </Button>
-        <h2 className="font-display text-3xl flex-1">{title}</h2>
-        <MuteButton muted={muted} onToggle={onToggleMute} />
-        <RadioToggle />
+    <div className="relative min-h-dvh">
+      <StudioBackdrop art="art/star-chart.jpg" dim={0.68} />
+      <div className="relative z-10 mx-auto max-w-5xl px-4 pb-16 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="sticky top-0 z-20 -mx-4 mb-6 flex items-center gap-2 border-b border-fg/10 bg-bg/70 px-4 py-2 backdrop-blur">
+          <Button variant="ghost" size="sm" onClick={onBack}>
+            Back
+          </Button>
+          <h2 className="font-display text-3xl flex-1">{title}</h2>
+          <MuteButton muted={muted} onToggle={onToggleMute} />
+          <RadioToggle />
+        </div>
+        {children}
       </div>
-      {children}
     </div>
   );
 }
@@ -514,40 +634,92 @@ function Campaign({
   pickA: string;
   setPickA: (id: string) => void;
 }) {
+  const done = save.campaignDone.length;
+  const held = new Set(save.unlocked);
   return (
-    <div className="space-y-4">
-      <img src={asset("art/star-chart.jpg")} alt="" className="w-full rounded-[20px] hairline object-cover h-36" crossOrigin="anonymous" />
-      <p className="text-sm text-muted">
-        Walk the council galaxies one seat at a time. Other modes already have every deck. Winning a chapter opens the next campaign mission and that Champion&apos;s campaign seat.
-      </p>
-      <div>
-        <p className="text-xs text-muted mb-2">Your seat</p>
-        <div className="grid grid-cols-1 gap-2">
-          {CHAMPIONS.filter((c) => save.unlocked.includes(c.id)).map((c) => (
-            <ChampRow key={c.id} c={c} selected={pickA === c.id} onClick={() => setPickA(c.id)} />
-          ))}
+    <div className="space-y-6">
+      <StudioPanel className="p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="studio-eyebrow">Council campaign</p>
+            <h3 className="font-display text-2xl mt-1">{done} of {MISSIONS.length} chapters held</h3>
+          </div>
+          <StudioChip tone={done >= MISSIONS.length ? "accent" : "muted"}>
+            {done >= MISSIONS.length
+              ? "Complete"
+              : `${held.size} ${held.size === 1 ? "seat" : "seats"} open`}
+          </StudioChip>
         </div>
-      </div>
-      <ol className="space-y-2">
-        {MISSIONS.map((m, i) => {
-          const open = i === 0 || save.campaignDone.includes(MISSIONS[i - 1]!.id) || save.campaignIndex >= i;
-          const done = save.campaignDone.includes(m.id);
-          return (
-            <li key={m.id} className={cn("rounded-[16px] bg-surface hairline p-4", !open && "opacity-40")}>
-              <div className="flex items-baseline justify-between gap-2">
-                <h3 className="font-display text-xl">{m.title}</h3>
-                <span className="text-[11px] text-muted">{done ? "Held" : open ? "Open" : "Sealed"}</span>
-              </div>
-              <p className="text-sm text-muted mt-1">{m.story}</p>
-              {open && (
-                <Button className="mt-3" size="sm" onClick={() => onPlay(m)}>
-                  Enter
-                </Button>
-              )}
-            </li>
-          );
-        })}
-      </ol>
+        <StudioProgress className="mt-3" value={done} max={MISSIONS.length} />
+        <p className="text-xs text-muted mt-3">
+          Walk the council galaxies one seat at a time. Other modes already have every deck. Winning a chapter opens the
+          next mission and that Champion&apos;s seat.
+        </p>
+      </StudioPanel>
+
+      <StudioSection title="Your seat" hint="Pick the Champion you bring to the next chapter.">
+        <StudioPortraitRow>
+          {CHAMPIONS.filter((c) => held.has(c.id)).map((c) => (
+            <StudioPortrait
+              key={c.id}
+              id={c.id}
+              name={c.name}
+              epithet={c.epithet}
+              selected={pickA === c.id}
+              onClick={() => setPickA(c.id)}
+            />
+          ))}
+        </StudioPortraitRow>
+      </StudioSection>
+
+      <StudioSection title="Chapters" hint="Each held chapter opens the seat that follows it.">
+        <ol className="space-y-2">
+          {MISSIONS.map((m, i) => {
+            const open = i === 0 || save.campaignDone.includes(MISSIONS[i - 1]!.id) || save.campaignIndex >= i;
+            const isDone = save.campaignDone.includes(m.id);
+            const seat = CHAMP_BY_ID[m.unlock];
+            return (
+              <li key={m.id}>
+                <StudioPanel className={cn("overflow-hidden", !open && "opacity-55")}>
+                  <div className="flex items-stretch">
+                    <div className="w-24 sm:w-28 shrink-0 relative overflow-hidden">
+                      <ChampPortrait id={m.opponent} />
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background:
+                            "linear-gradient(to right, transparent 30%, color-mix(in oklab, var(--color-surface) 92%, transparent))",
+                        }}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 p-3 sm:p-4">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="tabular text-[11px] text-subtle">{String(i + 1).padStart(2, "0")}</span>
+                        <h4 className="font-display text-xl">{m.title}</h4>
+                        <StudioChip tone={isDone ? "accent" : open ? "ivory" : "muted"}>
+                          {isDone ? "Held" : open ? "Open" : "Sealed"}
+                        </StudioChip>
+                        {seat && (
+                          <span className="text-[11px] text-muted">
+                            Seat · <span style={{ color: champTint(m.unlock) }}>{seat.name}</span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted mt-1.5 max-w-2xl">{m.story}</p>
+                      {open && (
+                        <Button className="mt-3" size="sm" onClick={() => onPlay(m)}>
+                          <Swords className="size-3.5" />
+                          {isDone ? "Replay chapter" : "Enter"}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </StudioPanel>
+              </li>
+            );
+          })}
+        </ol>
+      </StudioSection>
     </div>
   );
 }
@@ -576,48 +748,79 @@ function DeckPick({
   you: string;
 }) {
   const list = CHAMPIONS.filter((c) => unlocked.includes(c.id));
+  const custom = customs.find((d) => a.endsWith(d.id));
+  const ca = custom?.championId ?? a;
+  const foeList = hotseat ? CHAMPIONS : list;
+  function side(id: string, set: (v: string) => void, label: string, options: ChampionDef[], me: boolean) {
+    const sel = options.find((c) => c.id === id) ?? CHAMP_BY_ID[id.split("::")[0]!];
+    return (
+      <StudioPanel className="p-3 sm:p-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="studio-eyebrow">{label}</p>
+          {sel && <StudioChip tone={me ? "accent" : "muted"}>{sel.name}</StudioChip>}
+        </div>
+        <StudioPortraitRow className="mt-3">
+          {options.map((c) => (
+            <StudioPortrait
+              key={c.id}
+              id={c.id}
+              name={c.name}
+              epithet={c.epithet}
+              selected={id === c.id}
+              onClick={() => set(c.id)}
+            />
+          ))}
+        </StudioPortraitRow>
+        {me && customs.length > 0 && (
+          <div className="mt-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-subtle mb-1">Your seals</p>
+            <div className="flex flex-wrap gap-2">
+              {customs.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => set(`${d.championId}::${d.id}`)}
+                  className={cn(
+                    "rounded-full hairline px-3 py-1.5 text-xs bg-surface hover:bg-raised",
+                    a.endsWith(d.id) && "ring-1 ring-accent text-accent",
+                  )}
+                >
+                  {d.name} · {CHAMP_BY_ID[d.championId]?.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {sel && (
+          <p className="text-xs text-muted mt-3 leading-relaxed">
+            <span className="text-fg">{sel.abilityName}</span> ({sel.abilityCost}) · {sel.abilityText}
+          </p>
+        )}
+      </StudioPanel>
+    );
+  }
   return (
-    <div className="grid sm:grid-cols-2 gap-6">
-      <div>
-        <p className="text-xs text-muted mb-2">{hotseat ? "Seat I" : "You"}</p>
-        <div className="space-y-2">
-          {list.map((c) => (
-            <ChampRow key={c.id} c={c} selected={a === c.id} onClick={() => setA(c.id)} />
-          ))}
-          {customs.map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              onClick={() => setA(d.championId + "::" + d.id)}
-              className={cn("w-full text-left rounded-[16px] hairline px-3 py-2 bg-surface", a.endsWith(d.id) && "ring-1 ring-accent")}
-            >
-              <div className="font-display">{d.name}</div>
-              <div className="text-xs text-muted">{CHAMP_BY_ID[d.championId]?.name}</div>
-            </button>
-          ))}
-        </div>
+    <div className="space-y-4">
+      <div className="grid lg:grid-cols-2 gap-3 items-start">
+        {side(a, setA, hotseat ? "Seat I" : "You", hotseat ? CHAMPIONS : list, true)}
+        {side(b, setB, hotseat ? "Seat II" : "Opponent", foeList, false)}
       </div>
-      <div>
-        <p className="text-xs text-muted mb-2">{hotseat ? "Seat II" : "Opponent"}</p>
-        <div className="space-y-2">
-          {(hotseat ? CHAMPIONS : list).map((c) => (
-            <ChampRow key={c.id} c={c} selected={b === c.id} onClick={() => setB(c.id)} />
-          ))}
-        </div>
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-border" />
+        <span className="font-display text-lg text-subtle">versus</span>
+        <div className="h-px flex-1 bg-border" />
       </div>
-      <div className="sm:col-span-2">
-        <Button
-          className="w-full"
-          onClick={() => {
-            const custom = customs.find((d) => a.endsWith(d.id));
-            const ca = custom?.championId ?? a;
-            const la = custom?.cards ?? defaultList(ca);
-            onGo(la, defaultList(b), ca, b, you, CHAMP_BY_ID[b]?.name ?? "AI");
-          }}
-        >
-          {cta}
-        </Button>
-      </div>
+      <Button
+        className="w-full"
+        size="lg"
+        onClick={() => {
+          const la = custom?.cards ?? defaultList(ca);
+          onGo(la, defaultList(b), ca, b, you, CHAMP_BY_ID[b]?.name ?? "AI");
+        }}
+      >
+        <Swords className="size-4" />
+        {cta}
+      </Button>
     </div>
   );
 }
@@ -635,37 +838,76 @@ function Ranked({
   onGo: () => void;
   you: string;
 }) {
+  const played = save.wins + save.losses;
+  const winRate = played ? Math.round((save.wins / played) * 100) : 0;
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted">
-        All council, shadow, and lattice decks are open. Enter a name on the title seal to persist on the local ladder.
-        Ranked is vs the lattice AI — peer play is casual only.
-      </p>
-      <p className="tabular text-sm">
-        {you} · rating {save.rating}
-      </p>
-      <div className="space-y-2">
-        {CHAMPIONS.map((c) => (
-          <ChampRow key={c.id} c={c} selected={a === c.id} onClick={() => setA(c.id)} />
-        ))}
-      </div>
-      <Button className="w-full" onClick={onGo}>
-        Climb
+    <div className="space-y-6">
+      <StudioPanel glow className="p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="studio-eyebrow">Local ladder</p>
+            <h3 className="font-display text-3xl mt-1" style={{ color: champTint(a) }}>
+              {you}
+            </h3>
+          </div>
+          <StudioStats
+            items={[
+              { label: "Rating", value: String(save.rating) },
+              { label: "Record", value: `${save.wins}–${save.losses}` },
+              { label: "Win rate", value: `${winRate}%` },
+            ]}
+          />
+        </div>
+        <p className="text-xs text-muted mt-3">
+          All council, shadow, and lattice decks are open. Ranked is vs the lattice AI — peer play is casual only.
+        </p>
+      </StudioPanel>
+
+      <StudioSection title="Your Champion" hint="Every seat is open here; the ladder only remembers the result.">
+        <StudioPortraitRow>
+          {CHAMPIONS.map((c) => (
+            <StudioPortrait
+              key={c.id}
+              id={c.id}
+              name={c.name}
+              epithet={c.epithet}
+              selected={a === c.id}
+              onClick={() => setA(c.id)}
+            />
+          ))}
+        </StudioPortraitRow>
+      </StudioSection>
+
+      <Button className="w-full" size="lg" onClick={onGo}>
+        <Trophy className="size-4" />
+        Climb the lattice
       </Button>
-      <h3 className="font-display text-2xl pt-4">Ladder</h3>
-      {save.leaderboard.length === 0 && <p className="text-sm text-muted">No sealed names yet.</p>}
-      <ol className="space-y-1">
-        {save.leaderboard.map((r, i) => (
-          <li key={r.name} className="flex justify-between text-sm hairline rounded-[12px] px-3 py-2">
-            <span>
-              {i + 1}. {r.name}
-            </span>
-            <span className="tabular text-muted">
-              {r.rating} · {r.wins}–{r.losses}
-            </span>
-          </li>
-        ))}
-      </ol>
+
+      <StudioSection title="Sealed names" hint="Ranked results are kept on this device only.">
+        {save.leaderboard.length === 0 ? (
+          <p className="text-sm text-muted">No sealed names yet — climb once to write your line.</p>
+        ) : (
+          <ol className="space-y-1.5">
+            {save.leaderboard.map((r, i) => (
+              <li
+                key={r.name}
+                className={cn(
+                  "flex items-center justify-between rounded-[14px] hairline px-3 py-2 text-sm bg-surface",
+                  i === 0 && "ring-1 ring-accent/40",
+                )}
+              >
+                <span className="flex items-center gap-3 min-w-0">
+                  <span className="tabular text-[11px] text-subtle w-5">{i + 1}</span>
+                  <span className="truncate">{r.name}</span>
+                </span>
+                <span className="tabular text-muted shrink-0">
+                  {r.rating} · {r.wins}–{r.losses}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </StudioSection>
     </div>
   );
 }

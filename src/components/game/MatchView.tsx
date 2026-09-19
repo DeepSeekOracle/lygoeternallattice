@@ -24,6 +24,7 @@ import { sfxPlay } from "@/lib/game/audio";
 import type { Action, Difficulty, MatchState, TargetKind } from "@/lib/game/types";
 import { cn } from "@/lib/utils";
 import { BoardMinion, CardFace } from "./CardFace";
+import { StudioChip, StudioManaPips, StudioStats } from "@/components/app/StudioUI";
 import { ChampPortrait, champTint } from "./Sigil";
 
 export function MatchView({
@@ -34,6 +35,9 @@ export function MatchView({
   shakeOn,
   muted,
   onToggleMute,
+  nextLabel,
+  onNext,
+  onRetry,
 }: {
   initial: MatchState;
   difficulty: Difficulty;
@@ -42,6 +46,9 @@ export function MatchView({
   shakeOn: boolean;
   muted: boolean;
   onToggleMute: () => void;
+  nextLabel?: string;
+  onNext?: () => void;
+  onRetry?: () => void;
 }) {
   const [s, setS] = useState(initial);
   const [sel, setSel] = useState<string | null>(null);
@@ -389,24 +396,32 @@ export function MatchView({
           <div className="size-8 rounded-full overflow-hidden">
             <ChampPortrait id={oPl.championId} />
           </div>
-          <LifeMeter life={oPl.life} max={maxLifeOf(s, oppV)} mana={`${manaAvail(oPl)}/${oPl.permanentMana}`} align="right" />
+          <LifeMeter
+            life={oPl.life}
+            max={maxLifeOf(s, oppV)}
+            mana={`${manaAvail(oPl)}/${oPl.permanentMana}`}
+            align="right"
+            pips={{ available: manaAvail(oPl), permanent: oPl.permanentMana }}
+          />
         </button>
       </header>
 
-      <div className="px-3 flex items-center justify-between text-[11px] text-muted">
-        <span>
-          Hand {oPl.hand.length} · Library {oPl.library.length} · Archive {oPl.gy.length}
+      <div className="px-3 flex items-center justify-between gap-2 text-[11px] text-muted">
+        <span className="flex items-center gap-2 min-w-0">
+          <StudioChip tone={yourTurn ? "accent" : "muted"}>Dawn {s.turn}</StudioChip>
+          <StudioChip tone={yourTurn ? "ivory" : "muted"}>{phaseLabel}</StudioChip>
         </span>
-        <span className="tabular">
+        <span className="tabular truncate text-right">
           {s.phase === "main"
-            ? "Win at 0 HP"
+            ? `Hand ${oPl.hand.length} · Library ${oPl.library.length} · Archive ${oPl.gy.length}`
             : (s.phase === "attack" || s.phase === "block") && s.attackers.length > 0
-              ? `${phaseLabel} · ${s.attackers.reduce((n, id) => n + combatPreview(s, id, s.blocks[id]).face, 0)} to HP`
+              ? `${s.attackers.reduce((n, id) => n + combatPreview(s, id, s.blocks[id]).face, 0)} to HP · ${s.attackers.length} assaulting`
               : phaseLabel}
         </span>
       </div>
 
-      <div className="flex gap-1.5 px-3 py-2 overflow-x-auto scroll-none min-h-[96px] items-end justify-center">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-none flex flex-col">
+      <div className="flex gap-1.5 px-3 py-2 overflow-x-auto scroll-none min-h-[104px] [@media(max-height:700px)]:min-h-[62px] shrink-0 items-end justify-center">
         {oPl.board.length === 0 && (
           <span className="text-subtle text-xs self-center">Empty field</span>
         )}
@@ -436,15 +451,26 @@ export function MatchView({
         })}
       </div>
 
-      <div className="mx-3 my-1 flex items-center justify-center gap-2">
+      <div className="dawn-band mx-3 my-1 flex items-center justify-center gap-2">
         <div className="h-px flex-1 bg-border" />
-        <span className="text-[10px] uppercase tracking-[0.2em] text-subtle">
-          {locked ? "The lattice thinks…" : s.active === viewer ? "Your dawn" : `${s.players[s.active].name}'s dawn`}
+        <span
+          className={cn(
+            "text-[10px] uppercase tracking-[0.2em]",
+            locked ? "text-subtle" : yourTurn ? "text-accent" : "text-muted",
+          )}
+        >
+          {locked
+            ? "The lattice thinks…"
+            : hotseat
+              ? `${s.players[s.active].name} · ${s.active === 1 ? "Seat II" : "Seat I"}`
+              : yourTurn
+                ? "Your dawn"
+                : `${s.players[s.active].name}'s dawn`}
         </span>
         <div className="h-px flex-1 bg-border" />
       </div>
 
-      <div className="flex gap-1.5 px-3 py-2 overflow-x-auto scroll-none min-h-[104px] items-start justify-center">
+      <div className="flex gap-1.5 px-3 py-2 overflow-x-auto scroll-none min-h-[110px] [@media(max-height:700px)]:min-h-[66px] shrink-0 items-start justify-center">
         {vPl.board.length === 0 && (
           <span className="text-subtle text-xs self-center">Summon to the lattice</span>
         )}
@@ -473,10 +499,10 @@ export function MatchView({
         })}
       </div>
 
-      <div className="flex-1 min-h-0 px-2 pb-1 overflow-x-auto overflow-y-hidden scroll-none flex items-end gap-2 justify-center">
+      <div className="shrink-0 min-h-[176px] sm:min-h-[192px] [@media(max-height:700px)]:min-h-[152px] px-2 pb-2 pt-1 overflow-x-auto overflow-y-hidden scroll-none flex items-end gap-2 justify-center">
         {s.phase === "mulligan" && s.active === viewer ? (
-          <div className="flex flex-col items-center gap-3 w-full pb-2">
-            <p className="text-sm text-muted text-center px-4">
+          <div className="flex flex-col items-center gap-2 w-full pb-1">
+            <p className="text-xs sm:text-sm text-muted text-center px-4">
               Keep these four, or return them to the lattice once. Both Champions start at {maxLifeOf(s, viewer)} HP — reduce theirs to 0 to win.
             </p>
             <div className="flex gap-2 overflow-x-auto px-2">
@@ -523,6 +549,7 @@ export function MatchView({
           })
         )}
       </div>
+      </div>
 
       <footer className="px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 bg-surface/80 hairline border-x-0 border-b-0">
         <div className="flex items-center gap-2">
@@ -542,9 +569,20 @@ export function MatchView({
             </div>
           </button>
           <div className="ml-auto">
-            <LifeMeter life={vPl.life} max={maxLifeOf(s, viewer)} mana={`${manaAvail(vPl)}/${manaPool(vPl)}`} large />
+            <LifeMeter
+              life={vPl.life}
+              max={maxLifeOf(s, viewer)}
+              mana={`${manaAvail(vPl)}/${manaPool(vPl)}`}
+              pips={{ available: manaAvail(vPl), permanent: vPl.permanentMana }}
+              large
+            />
           </div>
         </div>
+        {s.phase === "main" && s.active === viewer && !vPl.combatUsed && !canAssault && !vPl.hand.some((id) => legal.some((a) => a.type === "play" && a.iid === id)) && (
+          <p className="mt-2 text-[11px] text-subtle text-center">
+            Nothing in hand lands this dawn — end it and let the seal stack.
+          </p>
+        )}
         <div className="mt-2 flex gap-2">
           <Button variant="ghost" size="sm" className="flex-1" onClick={() => setLogOpen(true)}>
             <BookOpen className="size-3.5" />
@@ -685,32 +723,80 @@ export function MatchView({
 
       {s.winner !== null && (
         <div className="absolute inset-0 scrim z-30 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-[24px] bg-surface hairline p-6 text-center">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-muted">
-              {s.winner === you || hotseat ? "Victory" : "Defeat"}
-            </p>
-            <h2 className="font-display text-3xl mt-2">
-              {hotseat
-                ? `${s.players[s.winner].name} wins`
-                : s.winner === you
-                  ? "You win"
-                  : "You lose"}
-            </h2>
-            <p className="text-sm text-muted mt-2">{s.winReason || "A Champion reached 0 HP."}</p>
-            <div className="mt-4 grid grid-cols-2 gap-3 text-left">
-              {([0, 1] as const).map((p) => (
-                <div key={p} className={cn("rounded-[14px] bg-raised hairline p-3", s.winner === p && "ring-1 ring-accent")}>
-                  <div className="text-[10px] uppercase tracking-wider text-muted">{p === you ? "You" : "Foe"}</div>
-                  <div className="font-display text-lg truncate">{s.players[p].name}</div>
-                  <div className={cn("tabular text-sm mt-1", s.players[p].life <= 0 && "text-danger")}>
-                    {Math.max(0, s.players[p].life)} HP
+          <div className="result-plate w-full max-w-sm rounded-[24px] bg-surface hairline p-6 text-center shadow-[0_30px_80px_-40px_rgba(0,0,0,0.95)]">
+            <div className="relative">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-muted">
+                {s.winner === you || hotseat ? "Victory" : "Defeat"}
+              </p>
+              <h2 className="font-display text-4xl mt-2">
+                {hotseat ? `${s.players[s.winner].name} wins` : s.winner === you ? "You win" : "You lose"}
+              </h2>
+              <p className="text-sm text-muted mt-2">{s.winReason || "A Champion reached 0 HP."}</p>
+              <div className="mt-4">
+                <StudioStats
+                  items={[
+                    { label: "Dawns", value: String(s.turn) },
+                    { label: "Your HP", value: String(Math.max(0, s.players[you].life)) },
+                    { label: "Foe HP", value: String(Math.max(0, s.players[you === 0 ? 1 : 0].life)) },
+                  ]}
+                />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-left">
+                {([0, 1] as const).map((p) => (
+                  <div
+                    key={p}
+                    className={cn(
+                      "rounded-[14px] bg-raised hairline p-3 flex items-center gap-2",
+                      s.winner === p && "ring-1 ring-accent",
+                    )}
+                  >
+                    <div className="size-9 rounded-full overflow-hidden shrink-0">
+                      <ChampPortrait id={s.players[p].championId} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] uppercase tracking-wider text-muted">{p === you ? "You" : "Foe"}</div>
+                      <div className="font-display text-base truncate">{s.players[p].name}</div>
+                      <div className={cn("tabular text-xs", s.players[p].life <= 0 && "text-danger")}>
+                        {Math.max(0, s.players[p].life)} HP
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div className="mt-5 flex flex-col gap-2">
+                {s.winner === you && onNext && nextLabel && (
+                  <Button
+                    size="lg"
+                    onClick={() => {
+                      onExit("win", s);
+                      onNext();
+                    }}
+                  >
+                    <Swords className="size-4" />
+                    {nextLabel}
+                  </Button>
+                )}
+                {s.winner !== you && onRetry && (
+                  <Button
+                    variant="ghost"
+                    size="lg"
+                    onClick={() => {
+                      onExit("lose", s);
+                      onRetry();
+                    }}
+                  >
+                    Retry chapter
+                  </Button>
+                )}
+                <Button
+                  variant={s.winner === you && onNext ? "ghost" : "primary"}
+                  className="w-full"
+                  onClick={() => onExit(s.winner === you ? "win" : "lose", s)}
+                >
+                  {s.winner === you && onNext ? "Back to the campaign" : "Continue"}
+                </Button>
+              </div>
             </div>
-            <Button className="mt-6 w-full" onClick={() => onExit(s.winner === you ? "win" : "lose", s)}>
-              Continue
-            </Button>
           </div>
         </div>
       )}
@@ -747,12 +833,14 @@ function LifeMeter({
   mana,
   align = "right",
   large,
+  pips,
 }: {
   life: number;
   max: number;
   mana: string;
   align?: "left" | "right";
   large?: boolean;
+  pips?: { available: number; permanent: number };
 }) {
   const pct = Math.max(0, Math.min(100, (life / Math.max(1, max)) * 100));
   const crit = life <= 5;
@@ -777,8 +865,14 @@ function LifeMeter({
           style={{ width: `${pct}%` }}
         />
       </div>
-      <div className={cn("tabular text-[10px] mt-0.5", large ? "text-accent" : "text-muted")}>
-        {mana} mana
+      <div
+        className={cn(
+          "mt-1 flex items-center gap-2",
+          align === "right" ? "justify-end" : "justify-start",
+        )}
+      >
+        {pips && <StudioManaPips available={pips.available} permanent={pips.permanent} large={large} />}
+        <span className={cn("tabular text-[10px]", large ? "text-accent" : "text-muted")}>{mana} mana</span>
       </div>
     </div>
   );

@@ -79,6 +79,8 @@ export function ChampPortrait({
         alt=""
         className={cn("block h-full w-full object-cover", className)}
         draggable={false}
+        loading="lazy"
+        decoding="async"
       />
     );
   }
