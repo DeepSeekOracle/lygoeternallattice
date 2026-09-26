@@ -57,6 +57,37 @@
   }
 }
 
+/* ── Viewport shell ──────────────────────────────────────────────────────
+   The arcade embeds this app under its own 40px chrome bar (.games-chrome),
+   so `100dvh` is taller than the space the app is actually given: every
+   full-height shell overflowed by exactly that bar and the bottom strip —
+   the match footer that carries End dawn / Confirm / Keep — fell below the
+   fold. `--app-h` is measured at runtime (src/lib/layout-metrics.ts) as
+   viewport minus whatever the host puts above the app; it degrades to plain
+   dvh (standalone build, chrome-less host) and to 100vh before hydration. */
+:root {
+  --app-chrome: 0px;
+  --app-h: 100dvh;
+  /* One knob for the match board: set by the board itself (MatchView measures
+     what the rows and hand need against the space the shell gives them) so a
+     short window scales the felt instead of pushing cards past the action
+     strip. 1 = every card at full size. */
+  --board-zoom: 1;
+}
+
+.app-shell {
+  height: var(--app-h);
+}
+
+.app-page {
+  min-height: var(--app-h);
+}
+
+/* The board scales, the action strip never does. */
+.board-zoom {
+  zoom: var(--board-zoom, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

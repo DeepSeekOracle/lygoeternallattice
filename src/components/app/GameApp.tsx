@@ -4,7 +4,7 @@ import {
   Dices,
   Hammer,
   Map as MapIcon,
-  Music,
+  Radio,
   Settings,
   Swords,
   Trophy,
@@ -30,7 +30,11 @@ import {
   StudioTile,
 } from "@/components/app/StudioUI";
 import { MuteButton, RadioToggle, SoundSwitch, VolumeRow } from "@/components/game/SoundControls";
-import { RadioMini } from "@/components/app/RadioMini";
+import { RadioDock, RADIO_FLOAT, syncRadio } from "@/components/app/RadioDock";
+import { bootRadio } from "@/lib/radio";
+import { useRadioOpen } from "@/lib/radio-ui";
+import { SupporterDoor, SupporterPane } from "@/components/app/SupporterPanel";
+import { installLayoutMetrics } from "@/lib/layout-metrics";
 import { MISSIONS, type Mission } from "@/lib/game/campaign";
 import { CARD_BY_ID, CARDS, CHAMP_BY_ID, CHAMPIONS, defaultList, deckIssues, KEYWORD_TEXT } from "@/lib/game/catalog";
 import { createMatch } from "@/lib/game/engine";
@@ -88,6 +92,8 @@ export function GameApp() {
     setNameDraft(s.playerName);
     applyAudioSettings(s.settings);
     setHydrated(true);
+    bootRadio();
+    const stopMetrics = installLayoutMetrics();
     const unlock = () => unlockAudio();
     window.addEventListener("pointerdown", unlock, { once: true });
     window.addEventListener("keydown", unlock, { once: true });
@@ -97,15 +103,53 @@ export function GameApp() {
     };
     document.addEventListener("visibilitychange", onVis);
     return () => {
+      stopMetrics();
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
     };
   }, []);
 
+  /* The arcade's supporter gate holds its donation reminder while a board is
+     live — a modal over a match reads as the game being broken. It can only
+     surface on the menus, and its "enter the code" door opens this app's own
+     pane instead of injecting a bar over the footer. */
+  useEffect(() => {
+    const g = typeof window === "undefined" ? undefined : window.LYGO_GATE;
+    if (!g) return;
+    const inMatch = screen === "match";
+    g.hold?.(inMatch);
+    if (!inMatch) g.suppress?.(45000);
+    const onDoor = () => setScreen("supporter");
+    document.addEventListener("lygo-gate-door", onDoor);
+    return () => {
+      document.removeEventListener("lygo-gate-door", onDoor);
+    };
+  }, [screen]);
+
+  /* The radio row (Settings → Radio) owns the radio's volume and on/off; the
+     save file is the single source of truth, and the dock and the settings row
+     both write it. The old "Lattice drone" slider drove a synth hum that read
+     as static — that layer is gone, and this slider now drives real audio. */
+  const radioOpen = useRadioOpen();
+
+  function setRadioVolume(v: number) {
+    setMusicVolume(v);
+    patchSettings({ music: v });
+  }
+
+  function setRadioEnabled(on: boolean) {
+    setMusicOn(on);
+    patchSettings({ musicOn: on });
+  }
+
+  useEffect(() => {
+    syncRadio(save.settings.music, !save.settings.muted && save.settings.musicOn);
+  }, [save.settings.music, save.settings.muted, save.settings.musicOn]);
+
   useEffect(() => {
     if (hydrated) writeSave(save);
-  }, [save, hydrated]);
+  }, [hydrated, save]);
 
   function enter() {
     unlockAudio();
@@ -202,7 +246,7 @@ export function GameApp() {
   const nextMission = MISSIONS.find((m) => !save.campaignDone.includes(m.id)) ?? null;
 
   if (!hydrated) {
-    return <div className="h-dvh bg-bg" />;
+    return <div className="app-shell bg-bg" />;
   }
 
   if (screen === "match" && match) {
@@ -239,14 +283,17 @@ export function GameApp() {
                 }
               : undefined
           }
+          radioVolume={save.settings.music}
+          radioEnabled={!save.settings.muted && save.settings.musicOn}
+          onRadioVolume={setRadioVolume}
+          onRadioEnabled={setRadioEnabled}
         />
-        <RadioMini />
       </>
     );
   }
 
   return (
-    <div className="h-dvh overflow-y-auto text-fg">
+    <div className="app-shell overflow-y-auto text-fg">
       {screen === "title" && (
         <Title
           save={save}
@@ -262,6 +309,7 @@ export function GameApp() {
           }}
           onName={() => patch({ playerName: nameDraft.trim().slice(0, 24) })}
           onQuickPlay={playMission}
+          onSupport={() => setScreen("supporter")}
           muted={save.settings.muted}
           onToggleMute={toggleSound}
         />
@@ -362,6 +410,7 @@ export function GameApp() {
             />
           )}
           {screen === "codex" && <Codex />}
+          {screen === "supporter" && <SupporterPane onDone={() => setScreen("title")} />}
           {screen === "settings" && (
             <SettingsPane
               save={save}
@@ -369,6 +418,7 @@ export function GameApp() {
               nameDraft={nameDraft}
               setNameDraft={setNameDraft}
               setSave={setSave}
+              onSupport={() => setScreen("supporter")}
             />
           )}
         </Subpage>
@@ -382,13 +432,21 @@ export function GameApp() {
           {toast}
         </button>
       )}
-      <RadioMini />
+      {radioOpen && (
+        <RadioDock
+          className={RADIO_FLOAT}
+          volume={save.settings.music}
+          enabled={!save.settings.muted && save.settings.musicOn}
+          onVolume={setRadioVolume}
+          onEnabled={setRadioEnabled}
+        />
+      )}
     </div>
   );
 }
 
 function labelFor(s: Screen): string {
-  return MODES.find((m) => m.id === s)?.label ?? s;
+  return MODES.find((m) => m.id === s)?.label ?? (s === "supporter" ? "Supporter access" : s);
 }
 
 function Title({
@@ -399,6 +457,7 @@ function Title({
   onNav,
   onName,
   onQuickPlay,
+  onSupport,
   muted,
   onToggleMute,
 }: {
@@ -409,6 +468,7 @@ function Title({
   onNav: (s: Screen) => void;
   onName: () => void;
   onQuickPlay: (m: Mission) => void;
+  onSupport: () => void;
   muted: boolean;
   onToggleMute: () => void;
 }) {
@@ -425,9 +485,9 @@ function Title({
     return undefined;
   };
   return (
-    <div className="relative min-h-dvh">
+    <div className="relative app-page">
       <StudioBackdrop art="art/title-bg.jpg" dim={0.5} />
-      <div className="relative z-10 mx-auto flex min-h-dvh max-w-5xl flex-col px-5 pb-12 pt-[max(1.25rem,env(safe-area-inset-top))]">
+      <div className="relative z-10 mx-auto flex app-page max-w-5xl flex-col px-5 pb-12 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 text-accent">
             <StudioMark />
@@ -549,9 +609,12 @@ function Title({
           </StudioSection>
         </div>
 
-        <p className="mt-auto pt-10 text-[11px] text-subtle">
+        <p className="mt-auto pt-8 text-[11px] text-subtle">
           Lattice Link is casual peer play · ladder is local to this device · {save.games} matches remembered
         </p>
+        <div className="mt-4">
+          <SupporterDoor onOpen={onSupport} />
+        </div>
       </div>
     </div>
   );
@@ -571,7 +634,7 @@ function Subpage({
   children: ReactNode;
 }) {
   return (
-    <div className="relative min-h-dvh">
+    <div className="relative app-page">
       <StudioBackdrop art="art/star-chart.jpg" dim={0.68} />
       <div className="relative z-10 mx-auto max-w-5xl px-4 pb-16 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="sticky top-0 z-20 -mx-4 mb-6 flex items-center gap-2 border-b border-fg/10 bg-bg/70 px-4 py-2 backdrop-blur">
@@ -1128,12 +1191,14 @@ function SettingsPane({
   patchSettings,
   nameDraft,
   setNameDraft,
+  onSupport,
 }: {
   save: SaveData;
   setSave: (s: SaveData) => void;
   patchSettings: (p: Partial<SaveData["settings"]>) => void;
   nameDraft: string;
   setNameDraft: (v: string) => void;
+  onSupport: () => void;
 }) {
   const { muted, sfxOn, musicOn, sfx, music, shake, difficulty } = save.settings;
   return (
@@ -1149,7 +1214,7 @@ function SettingsPane({
             if (on) sfxPlay("ui");
           }}
           label={muted ? "Sound off" : "Sound on"}
-          hint={muted ? "Chimes and lattice drone are silent." : "Chimes and lattice drone are live."}
+          hint={muted ? "Chimes and the radio are silent." : "Chimes and the radio are live."}
         />
         <VolumeRow
           label="Chimes"
@@ -1171,11 +1236,11 @@ function SettingsPane({
           }}
         />
         <VolumeRow
-          label="Lattice drone"
+          label="Radio"
           value={music}
           enabled={musicOn}
           disabled={muted}
-          icon={Music}
+          icon={Radio}
           onEnabled={(v) => {
             unlockAudio();
             setMusicOn(v);
@@ -1215,6 +1280,10 @@ function SettingsPane({
           <option value="hard">Strict</option>
         </select>
       </label>
+      <section className="space-y-2">
+        <h3 className="font-display text-2xl">Supporter</h3>
+        <SupporterDoor onOpen={onSupport} />
+      </section>
     </div>
   );
 }

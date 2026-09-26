@@ -37,6 +37,13 @@ export interface SaveData {
     music: number;
     shake: boolean;
     difficulty: Difficulty;
+    /* Sound switches. The audio module and every settings control have always
+       read these three and the save file has always carried them, but they
+       were missing from the shape — so each reference was a type error, which
+       is why `npm run typecheck` was red. */
+    muted: boolean;
+    sfxOn: boolean;
+    musicOn: boolean;
   };
 }
 
@@ -56,7 +63,15 @@ export function defaultSave(): SaveData {
     games: 0,
     leaderboard: [],
     tutorialDone: false,
-    settings: { sfx: 0.8, music: 0.45, shake: true, difficulty: "normal" },
+    settings: {
+      sfx: 0.8,
+      music: 0.45,
+      shake: true,
+      difficulty: "normal",
+      muted: false,
+      sfxOn: true,
+      musicOn: true,
+    },
   };
 }
 

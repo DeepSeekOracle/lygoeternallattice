@@ -89,8 +89,11 @@ function chrome() {
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Outfit:wght@400;500;600&display=swap"
     />
-    <script src="/games/arcade-ledger.js?v=1"></script>
+    <script src="/games/arcade-ledger.js?v=5"></script>
     <script src="/games/hall-bridge.js?v=1"></script>
+    <script>window.LYGO_GATE_EMBED = true;</script>
+    <link rel="stylesheet" href="/games/lygo-gate.css?v=2">
+    <script src="/games/lygo-gate.js?v=2" defer></script>
     <script type="module" crossorigin src="./assets/${js}"></script>
     <link rel="stylesheet" crossorigin href="./assets/${css}">
     <link rel="stylesheet" href="/games/hub.css?v=5">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, BookOpen, Heart, Shield, Swords, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MuteButton, RadioToggle } from "@/components/game/SoundControls";
@@ -23,6 +23,8 @@ import { FACE_TARGET, allowsFace, needsTarget, targetPrompt } from "@/lib/game/f
 import { sfxPlay } from "@/lib/game/audio";
 import type { Action, Difficulty, MatchState, TargetKind } from "@/lib/game/types";
 import { cn } from "@/lib/utils";
+import { useRadioOpen } from "@/lib/radio-ui";
+import { RadioDock, RADIO_DROP } from "@/components/app/RadioDock";
 import { BoardMinion, CardFace } from "./CardFace";
 import { StudioChip, StudioManaPips, StudioStats } from "@/components/app/StudioUI";
 import { ChampPortrait, champTint } from "./Sigil";
@@ -38,6 +40,10 @@ export function MatchView({
   nextLabel,
   onNext,
   onRetry,
+  radioVolume,
+  radioEnabled,
+  onRadioVolume,
+  onRadioEnabled,
 }: {
   initial: MatchState;
   difficulty: Difficulty;
@@ -49,7 +55,12 @@ export function MatchView({
   nextLabel?: string;
   onNext?: () => void;
   onRetry?: () => void;
+  radioVolume: number;
+  radioEnabled: boolean;
+  onRadioVolume: (v: number) => void;
+  onRadioEnabled: (on: boolean) => void;
 }) {
+  const radioOpen = useRadioOpen();
   const [s, setS] = useState(initial);
   const [sel, setSel] = useState<string | null>(null);
   const [inspect, setInspect] = useState<string | null>(null);
@@ -66,6 +77,7 @@ export function MatchView({
   const seenBoard = useRef<Set<string>>(new Set());
   const hintTimer = useRef<number>(0);
   const suppressBoard = useRef(false);
+  const boardRef = useRef<HTMLDivElement | null>(null);
 
   const legal = useMemo(() => getLegalActions(s), [s]);
   const pl = s.players[you];
@@ -134,6 +146,36 @@ export function MatchView({
   useEffect(() => {
     for (const id of s.players[viewer].board) seenBoard.current.add(id);
   }, [s.players, viewer]);
+
+  /* Your hand sits at the bottom of the pan area, so when a full board
+     overflows the region the cards a player needs are the part that starts
+     hidden. Always rest on the bottom: the opponent's row is what pans out of
+     sight, never the hand or your own seals.
+
+     Same effect sizes the board: `--board-zoom` is the ratio of the space the
+     shell gives the board to what the board actually needs, so a short window
+     scales every card instead of stacking rows past the action strip. It is
+     measured, never guessed — scrollHeight is in the board's own units, so the
+     ratio is stable however the current zoom already sits. */
+  useLayoutEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const fit = () => {
+      const pageAvail = el.getBoundingClientRect().height;
+      const natural = el.scrollHeight;
+      if (!pageAvail || !natural) return;
+      const z = Math.max(0.72, Math.min(1, pageAvail / natural));
+      document.documentElement.style.setProperty("--board-zoom", z.toFixed(3));
+      el.scrollTop = el.scrollHeight;
+    };
+    fit();
+    const settle = window.setTimeout(fit, 80); // after art and fonts land
+    window.addEventListener("resize", fit);
+    return () => {
+      window.clearTimeout(settle);
+      window.removeEventListener("resize", fit);
+    };
+  }, [s, viewer]);
 
   function flash(msg: string) {
     setHint(msg);
@@ -369,19 +411,34 @@ export function MatchView({
   });
 
   return (
-    <div className={cn("relative h-dvh flex flex-col bg-bg text-fg overflow-hidden", shake && "shake-board")}>
-      <header className="flex items-center gap-2 px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2">
-        <Button variant="ghost" size="icon" className="size-10" onClick={() => onExit("quit", s)} aria-label="Leave">
+    <div className={cn("app-shell relative flex flex-col bg-bg text-fg overflow-hidden", shake && "shake-board")}>
+      <header className="flex shrink-0 items-center gap-1.5 px-2.5 pt-[max(0.4rem,env(safe-area-inset-top))] pb-1.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9 shrink-0"
+          onClick={() => onExit("quit", s)}
+          aria-label="Leave the match"
+        >
           <ArrowLeft className="size-4" />
         </Button>
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-muted truncate">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted truncate">
             {banner ?? "Skirmish"}
           </div>
-          <div className="font-display text-lg leading-none truncate">{oPl.name}</div>
+          <div className="font-display text-base leading-none truncate">{oPl.name}</div>
         </div>
-        <MuteButton muted={muted} onToggle={onToggleMute} className="size-10" />
-        <RadioToggle className="size-10" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9 shrink-0"
+          onClick={() => setLogOpen(true)}
+          aria-label="Lattice log"
+        >
+          <BookOpen className="size-4" />
+        </Button>
+        <MuteButton muted={muted} onToggle={onToggleMute} className="size-9" />
+        <RadioToggle className="size-9" />
         <button
           type="button"
           onClick={() => {
@@ -393,7 +450,7 @@ export function MatchView({
             faceAim && "target-pulse",
           )}
         >
-          <div className="size-8 rounded-full overflow-hidden">
+          <div className="size-7 rounded-full overflow-hidden shrink-0">
             <ChampPortrait id={oPl.championId} />
           </div>
           <LifeMeter
@@ -406,7 +463,19 @@ export function MatchView({
         </button>
       </header>
 
-      <div className="px-3 flex items-center justify-between gap-2 text-[11px] text-muted">
+      {/* The dock hangs under the button that opened it, never over the action
+          strip where End dawn / Confirm / Keep live. */}
+      {radioOpen && (
+        <RadioDock
+          className={RADIO_DROP}
+          volume={radioVolume}
+          enabled={radioEnabled}
+          onVolume={onRadioVolume}
+          onEnabled={onRadioEnabled}
+        />
+      )}
+
+      <div className="flex shrink-0 items-center justify-between gap-2 px-3 pb-1 text-[10px] text-muted">
         <span className="flex items-center gap-2 min-w-0">
           <StudioChip tone={yourTurn ? "accent" : "muted"}>Dawn {s.turn}</StudioChip>
           <StudioChip tone={yourTurn ? "ivory" : "muted"}>{phaseLabel}</StudioChip>
@@ -420,10 +489,17 @@ export function MatchView({
         </span>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto scroll-none flex flex-col">
-      <div className="flex gap-1.5 px-3 py-2 overflow-x-auto scroll-none min-h-[104px] [@media(max-height:700px)]:min-h-[62px] shrink-0 items-end justify-center">
+      {/* The board pans and scales as one piece; the action strip below it
+          never moves, so End dawn / Confirm / Keep are always reachable. */}
+      <div ref={boardRef} className="board-zoom flex-1 min-h-0 overflow-y-auto scroll-none flex flex-col">
+      <div
+        className={cn(
+          "flex shrink-0 items-end justify-center gap-1.5 overflow-x-auto scroll-none px-3",
+          oPl.board.length === 0 ? "min-h-[30px] py-1" : "min-h-[116px] py-2",
+        )}
+      >
         {oPl.board.length === 0 && (
-          <span className="text-subtle text-xs self-center">Empty field</span>
+          <span className="text-subtle text-[11px] self-center">Empty field</span>
         )}
         {oPl.board.map((id) => {
           const inst = s.cards[id]!;
@@ -470,9 +546,14 @@ export function MatchView({
         <div className="h-px flex-1 bg-border" />
       </div>
 
-      <div className="flex gap-1.5 px-3 py-2 overflow-x-auto scroll-none min-h-[110px] [@media(max-height:700px)]:min-h-[66px] shrink-0 items-start justify-center">
+      <div
+        className={cn(
+          "flex shrink-0 items-start justify-center gap-1.5 overflow-x-auto scroll-none px-3",
+          vPl.board.length === 0 ? "min-h-[30px] py-1" : "min-h-[124px] py-2",
+        )}
+      >
         {vPl.board.length === 0 && (
-          <span className="text-subtle text-xs self-center">Summon to the lattice</span>
+          <span className="text-subtle text-[11px] self-center">Summon to the lattice</span>
         )}
         {vPl.board.map((id) => {
           const inst = s.cards[id]!;
@@ -499,66 +580,51 @@ export function MatchView({
         })}
       </div>
 
-      <div className="shrink-0 min-h-[176px] sm:min-h-[192px] [@media(max-height:700px)]:min-h-[152px] px-2 pb-2 pt-1 overflow-x-auto overflow-y-hidden scroll-none flex items-end gap-2 justify-center">
-        {s.phase === "mulligan" && s.active === viewer ? (
-          <div className="flex flex-col items-center gap-2 w-full pb-1">
-            <p className="text-xs sm:text-sm text-muted text-center px-4">
-              Keep these four, or return them to the lattice once. Both Champions start at {maxLifeOf(s, viewer)} HP — reduce theirs to 0 to win.
-            </p>
-            <div className="flex gap-2 overflow-x-auto px-2">
-              {vPl.hand.map((id) => (
-                <CardFace key={id} cardId={s.cards[id]!.cardId} inst={s.cards[id]} size="sm" playCost={playCost(s, viewer, id)} />
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => act({ type: "mulligan", keep: false })} disabled={s.mulliganUsed[viewer]}>
-                Redraw
-              </Button>
-              <Button onClick={() => act({ type: "mulligan", keep: true })}>Keep</Button>
-            </div>
-          </div>
-        ) : (
-          vPl.hand.map((id) => {
-            const inst = s.cards[id]!;
-            const playable = legal.some((a) => a.type === "play" && a.iid === id);
-            return (
-              <CardFace
-                key={id}
-                cardId={inst.cardId}
-                inst={inst}
-                size="sm"
-                selected={sel === id}
-                dim={!playable && s.phase === "main"}
-                playable={playable && s.phase === "main"}
-                playCost={playCost(s, viewer, id)}
-                onClick={() => {
-                  if (sel === id && pending) {
-                    clearAim();
-                    return;
-                  }
-                  const can = legal.some((a) => a.type === "play" && a.iid === id);
-                  if (can) tryPlay(id);
-                  else {
-                    const why = playBlockReason(s, viewer, id);
-                    if (why && s.phase === "main" && s.active === viewer) flash(why);
-                    setInspect(id);
-                  }
-                }}
-              />
-            );
-          })
+      <div className="flex shrink-0 items-end justify-center gap-2 overflow-x-auto overflow-y-hidden scroll-none px-2 pb-1.5 pt-1 min-h-[204px] mt-auto">
+        {vPl.hand.length === 0 && (
+          <span className="text-subtle text-xs self-center">Hand empty</span>
         )}
+        {vPl.hand.map((id) => {
+          const inst = s.cards[id]!;
+          const canPlay = legal.some((a) => a.type === "play" && a.iid === id);
+          return (
+            <CardFace
+              key={id}
+              cardId={inst.cardId}
+              inst={inst}
+              size="sm"
+              selected={sel === id}
+              dim={!canPlay && s.phase === "main"}
+              playable={canPlay && s.phase === "main"}
+              playCost={playCost(s, viewer, id)}
+              onClick={() => {
+                if (sel === id && pending) {
+                  clearAim();
+                  return;
+                }
+                if (canPlay) tryPlay(id);
+                else {
+                  const why = playBlockReason(s, viewer, id);
+                  if (why && s.phase === "main" && s.active === viewer) flash(why);
+                  setInspect(id);
+                }
+              }}
+            />
+          );
+        })}
       </div>
       </div>
 
-      <footer className="px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 bg-surface/80 hairline border-x-0 border-b-0">
+      {/* The action strip is pinned: it is the only place phase actions live,
+          so nothing a player must press can be scrolled off or covered. */}
+      <footer className="shrink-0 bg-surface/80 hairline border-x-0 border-b-0 px-3 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={heroClick}
-            className="flex items-center gap-2 rounded-[14px] bg-raised hairline px-2 py-1.5 min-w-0"
+            className="flex items-center gap-2 rounded-[14px] bg-raised hairline px-2 py-1 min-w-0"
           >
-            <div className="size-9 rounded-full overflow-hidden shrink-0">
+            <div className="size-8 rounded-full overflow-hidden shrink-0">
               <ChampPortrait id={vPl.championId} />
             </div>
             <div className="min-w-0 text-left">
@@ -578,16 +644,40 @@ export function MatchView({
             />
           </div>
         </div>
-        {s.phase === "main" && s.active === viewer && !vPl.combatUsed && !canAssault && !vPl.hand.some((id) => legal.some((a) => a.type === "play" && a.iid === id)) && (
-          <p className="mt-2 text-[11px] text-subtle text-center">
-            Nothing in hand lands this dawn — end it and let the seal stack.
+
+        {s.phase === "mulligan" && s.active === viewer && (
+          <p className="mt-1 text-[11px] text-muted text-center leading-snug">
+            Keep these four, or return them to the lattice once. Both Champions start at {maxLifeOf(s, viewer)} HP.
           </p>
         )}
-        <div className="mt-2 flex gap-2">
-          <Button variant="ghost" size="sm" className="flex-1" onClick={() => setLogOpen(true)}>
-            <BookOpen className="size-3.5" />
-            Log
-          </Button>
+        {s.phase === "main" &&
+          s.active === viewer &&
+          !vPl.combatUsed &&
+          !canAssault &&
+          !vPl.hand.some((id) => legal.some((a) => a.type === "play" && a.iid === id)) && (
+            <p className="mt-1 text-[11px] text-subtle text-center">
+              Nothing in hand lands this dawn — end it and let the seal stack.
+            </p>
+          )}
+
+        <div className="mt-1.5 flex items-stretch gap-2">
+          {s.phase === "mulligan" && s.active === viewer && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex-1"
+                onClick={() => act({ type: "mulligan", keep: false })}
+                disabled={s.mulliganUsed[viewer]}
+              >
+                Redraw
+              </Button>
+              <Button size="sm" className="flex-[2]" onClick={() => act({ type: "mulligan", keep: true })}>
+                Keep these four
+              </Button>
+            </>
+          )}
+
           {s.phase === "main" && s.active === viewer && (
             <>
               {!vPl.combatUsed && canAssault && (
@@ -608,21 +698,34 @@ export function MatchView({
                   Assault
                 </Button>
               )}
-              <Button size="sm" className="flex-1" onClick={() => act({ type: "endTurn" })}>
+              <Button size="sm" className="flex-[2]" onClick={() => act({ type: "endTurn" })}>
                 End dawn
               </Button>
             </>
           )}
+
           {s.phase === "attack" && s.active === viewer && (
             <Button size="sm" className="flex-1" onClick={() => act({ type: "confirmAttack" })}>
               {s.attackers.length ? `Confirm assault (${s.attackers.length})` : "Pass assault"}
             </Button>
           )}
+
           {s.phase === "block" && s.humans[viewer] && viewer !== s.active && (
             <Button size="sm" className="flex-1" onClick={() => act({ type: "confirmBlock" })}>
               <Shield className="size-3.5" />
               Confirm seals
             </Button>
+          )}
+
+          {!(
+            (s.phase === "mulligan" && s.active === viewer) ||
+            (s.phase === "main" && s.active === viewer) ||
+            (s.phase === "attack" && s.active === viewer) ||
+            (s.phase === "block" && s.humans[viewer] && viewer !== s.active)
+          ) && (
+            <p className="flex-1 self-center text-center text-[11px] text-subtle">
+              {locked ? "The lattice thinks…" : `${s.players[s.active].name} is playing…`}
+            </p>
           )}
         </div>
       </footer>

@@ -216,5 +216,6 @@ export type Screen =
   | "forge"
   | "codex"
   | "settings"
+  | "supporter"
   | "match"
   | "tutorial";

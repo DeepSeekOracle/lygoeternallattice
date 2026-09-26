@@ -1,8 +1,20 @@
+/* Game audio.
+ *
+ * Sound effects are synthesised here (short oscillator blips on the SFX bus).
+ * There is deliberately no ambient bed: this used to run two detuned sine
+ * oscillators at 110 Hz and 164.8 Hz through a permanent gain node, which did
+ * not read as a room tone — it read as a dirty low hum, the thing players
+ * described as "just static". A sustained synth drone is not a substitute for
+ * music, so the ambient layer is gone and the music bus with it. Whatever sits
+ * on that bus now is the radio player (src/lib/radio.ts), which is real audio
+ * the player can pause, skip and volume-control.
+ *
+ * The music/musicOn settings survive for save-file compatibility; they are
+ * routed to the radio by GameApp rather than to Web Audio. */
+
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let sfx: GainNode | null = null;
-let music: GainNode | null = null;
-let drone: OscillatorNode | null = null;
 let unlocked = false;
 
 let sfxVol = 0.8;
@@ -23,9 +35,7 @@ function ac(): AudioContext | null {
     ctx = new C({ latencyHint: "interactive" });
     master = ctx.createGain();
     sfx = ctx.createGain();
-    music = ctx.createGain();
     sfx.connect(master);
-    music.connect(master);
     master.connect(ctx.destination);
     applyGains();
   }
@@ -33,11 +43,10 @@ function ac(): AudioContext | null {
 }
 
 function applyGains() {
-  if (!ctx || !master || !sfx || !music) return;
+  if (!ctx || !master || !sfx) return;
   const t = ctx.currentTime;
   master.gain.setTargetAtTime(muted ? 0 : 1, t, 0.04);
   sfx.gain.setTargetAtTime(sfxOn ? sfxVol * sfxVol : 0, t, 0.04);
-  music.gain.setTargetAtTime(musicOn ? musicVol * musicVol : 0, t, 0.04);
 }
 
 export type AudioSettings = {
@@ -67,7 +76,6 @@ export function unlockAudio() {
   if (c.state === "suspended") void c.resume();
   unlocked = true;
   applyGains();
-  startDrone();
 }
 
 export function setSfxVolume(v: number) {
@@ -103,6 +111,11 @@ export function setMusicOn(v: boolean) {
 
 export function isMuted() {
   return muted;
+}
+
+/** True when the radio may be heard at all: master sound on and the radio row on. */
+export function radioAudible() {
+  return !muted && musicOn;
 }
 
 function beep(freq: number, dur: number, type: OscillatorType, gain = 0.08, bus: GainNode | null = sfx) {
@@ -161,25 +174,6 @@ export function sfxPlay(kind: string) {
     default:
       beep(400, 0.06, "sine", 0.03);
   }
-}
-
-function startDrone() {
-  const c = ac();
-  if (!c || !music || drone) return;
-  const o1 = c.createOscillator();
-  const o2 = c.createOscillator();
-  const g = c.createGain();
-  o1.type = "sine";
-  o2.type = "sine";
-  o1.frequency.value = 110;
-  o2.frequency.value = 164.8;
-  g.gain.value = 0.035;
-  o1.connect(g);
-  o2.connect(g);
-  g.connect(music);
-  o1.start();
-  o2.start();
-  drone = o1;
 }
 
 export function resumeAudio() {
